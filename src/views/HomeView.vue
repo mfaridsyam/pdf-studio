@@ -4,13 +4,6 @@
 
       <div class="hero">
         <h1>Alat PDF Lengkap,<br /><span class="hero-accent">Gratis &amp; Aman</span></h1>
-        <p>Semua proses terjadi langsung di browser Anda.<br />Tidak ada file yang dikirim ke server.</p>
-        <div class="hero-badges">
-          <span class="badge">🔒 100% Privat</span>
-          <span class="badge">⚡ Cepat &amp; Lokal</span>
-          <span class="badge">💯 Gratis Selamanya</span>
-          <span class="badge">📲 Bisa Diinstal</span>
-        </div>
       </div>
 
       <template v-for="grp in visibleGroups" :key="grp.id">

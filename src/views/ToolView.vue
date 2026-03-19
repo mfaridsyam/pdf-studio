@@ -26,7 +26,7 @@
               :class="{ 'mg-grid-over': mgGridOver }"
             >
               <div class="merge-hint">
-                <span>↔</span> Seret kartu untuk mengubah urutan — urutan kiri = halaman pertama
+                 Seret kartu untuk mengubah urutan
               </div>
 
               <div class="merge-grid">
