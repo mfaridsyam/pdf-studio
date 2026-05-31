@@ -1,29 +1,48 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --font:         'Outfit', system-ui, -apple-system, sans-serif;
-  --red:          #E8261A;
-  --red-dark:     #c41f14;
-  --red-light:    #fef2f1;
-  --green:        #10b981;
+  --font: 'Outfit', system-ui, -apple-system, sans-serif;
+
+  /* Zinc monochrome scale */
+  --c-white: #FFFFFF;
+  --c-50:    #FAFAFA;
+  --c-100:   #F4F4F5;
+  --c-200:   #E4E4E7;
+  --c-300:   #D4D4D8;
+  --c-400:   #A1A1AA;
+  --c-500:   #71717A;
+  --c-600:   #52525B;
+  --c-700:   #3F3F46;
+  --c-800:   #27272A;
+  --c-900:   #18181B;
+  --c-950:   #09090B;
+
+  /* Semantic aliases */
+  --text:      var(--c-950);
+  --text-2:    var(--c-500);
+  --text-3:    var(--c-400);
+  --surface:   var(--c-white);
+  --bg:        var(--c-50);
+  --border:    var(--c-200);
+  --border-2:  var(--c-300);
+  --shadow:    0 1px 2px rgba(0,0,0,.05), 0 2px 4px rgba(0,0,0,.04);
+  --shadow-md: 0 4px 8px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.04);
+  --radius:    10px;
+  --radius-sm: 6px;
+
+  /* Functional state colors — kept only for semantic meaning */
+  --green:        #16a34a;
   --green-light:  #f0fdf4;
   --green-border: #bbf7d0;
-  --text:         #111827;
-  --text-2:       #4b5563;
-  --text-3:       #9ca3af;
-  --surface:      #ffffff;
-  --bg:           #f9fafb;
-  --border:       #e5e7eb;
-  --border-2:     #d1d5db;
-  --shadow:       0 4px 16px rgba(0,0,0,.08);
-  --radius:       12px;
-  --radius-sm:    8px;
-  --yellow-bg:    #fffbeb;
-  --yellow-border:#fde68a;
-  --yellow-text:  #92400e;
-  --blue-bg:      #eff6ff;
-  --blue-border:  #bfdbfe;
-  --blue-text:    #1e40af;
+  --warn-bg:      #fffbeb;
+  --warn-border:  #fde68a;
+  --warn-text:    #92400e;
+  --info-bg:      #eff6ff;
+  --info-border:  #bfdbfe;
+  --info-text:    #1e40af;
+  --err-text:     #dc2626;
+  --err-bg:       #fef2f2;
+  --err-border:   #fecaca;
 }
 
 html { font-size: 16px; -webkit-text-size-adjust: 100%; }
@@ -50,5 +69,5 @@ input[type='number']::-webkit-inner-spin-button { opacity: 1; }
 
 ::-webkit-scrollbar       { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+::-webkit-scrollbar-thumb { background: var(--c-300); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--c-400); }

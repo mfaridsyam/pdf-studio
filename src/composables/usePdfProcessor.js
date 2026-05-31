@@ -14,6 +14,55 @@ async function loadPDFjs() {
   window._pdfjsReady = true
 }
 
+function loadScriptOnce(src, windowKey) {
+  if (window[windowKey]) return Promise.resolve()
+  return new Promise((res, rej) => {
+    const s = document.createElement('script')
+    s.src = src
+    s.onload = res
+    s.onerror = () => rej(new Error('Gagal memuat library: ' + src))
+    document.head.appendChild(s)
+  })
+}
+
+async function loadMammoth() {
+  await loadScriptOnce(
+    'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
+    'mammoth'
+  )
+}
+
+async function loadXLSX() {
+  await loadScriptOnce(
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    'XLSX'
+  )
+}
+
+async function loadJSZip() {
+  await loadScriptOnce(
+    'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+    'JSZip'
+  )
+}
+
+function escXml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 export function usePdfProcessor() {
   const processing = ref(false)
   const progress   = ref(0)
@@ -441,10 +490,358 @@ export function usePdfProcessor() {
     finally { processing.value = false }
   }
 
+  async function doWord2PDF(file) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(15, 'Memuat konverter Word...')
+      await loadMammoth()
+
+      setProgress(40, 'Membaca dokumen Word...')
+      const ab = await readAB(file)
+      const r = await window.mammoth.convertToHtml({ arrayBuffer: ab })
+
+      if (!r.value && r.messages.some(m => m.type === 'error')) {
+        throw new Error(r.messages.find(m => m.type === 'error').message)
+      }
+
+      setProgress(80, 'Menyiapkan tampilan...')
+
+      const html = `<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>${escHtml(file.name)}</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:'Calibri','Arial',sans-serif;font-size:11pt;line-height:1.6;color:#000;margin:0;padding:0}
+.page{width:210mm;min-height:297mm;padding:25mm 30mm;margin:0 auto;background:#fff}
+h1{font-size:20pt}h2{font-size:16pt}h3{font-size:13pt}
+p{margin:.35em 0}
+table{border-collapse:collapse;width:100%;margin:6px 0}
+td,th{border:1px solid #ccc;padding:4px 8px;vertical-align:top}
+th{background:#f0f0f0;font-weight:700}
+img{max-width:100%;height:auto}
+ul,ol{margin:.3em 0;padding-left:1.4em}
+@media print{body{padding:0}.page{width:100%;padding:15mm 20mm}}
+</style>
+</head>
+<body><div class="page">${r.value || '<p><em>Dokumen kosong atau tidak dapat dibaca.</em></p>'}</div></body>
+</html>`
+
+      setProgress(100, 'Siap!')
+      return { html, name: file.name.replace(/\.docx?$/i, '') + '.pdf' }
+    } catch (e) {
+      errMsg.value = 'Gagal konversi: ' + e.message
+      return null
+    } finally { processing.value = false }
+  }
+
+  async function doExcel2PDF(file) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(15, 'Memuat konverter Excel...')
+      await loadXLSX()
+
+      setProgress(40, 'Membaca file Excel...')
+      const ab = await readAB(file)
+      const wb = window.XLSX.read(new Uint8Array(ab), { type: 'array' })
+
+      setProgress(70, 'Merender tabel...')
+
+      let sheetsHtml = ''
+      for (const sheetName of wb.SheetNames) {
+        const ws = wb.Sheets[sheetName]
+        const tableHtml = window.XLSX.utils.sheet_to_html(ws, { editable: false })
+        sheetsHtml += `<div class="sheet-wrap"><h2 class="sheet-title">${escHtml(sheetName)}</h2>${tableHtml}</div>`
+      }
+
+      const html = `<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>${escHtml(file.name)}</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:'Calibri','Arial',sans-serif;font-size:10pt;color:#000;margin:0;padding:0}
+.page{padding:15mm 10mm;margin:0 auto;background:#fff}
+.sheet-wrap{margin-bottom:20px;page-break-after:always}
+.sheet-wrap:last-child{page-break-after:avoid}
+.sheet-title{font-size:13pt;font-weight:700;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #333}
+table{border-collapse:collapse;width:100%;font-size:9pt}
+td,th{border:1px solid #ccc;padding:3px 6px;vertical-align:middle;min-width:50px;white-space:pre-wrap}
+tr:nth-child(even){background:#f8f8f8}
+@media print{.page{padding:10mm}}
+</style>
+</head>
+<body><div class="page">${sheetsHtml}</div></body>
+</html>`
+
+      setProgress(100, 'Siap!')
+      return { html, name: file.name.replace(/\.(xlsx?|csv|ods)$/i, '') + '.pdf' }
+    } catch (e) {
+      errMsg.value = 'Gagal konversi: ' + e.message
+      return null
+    } finally { processing.value = false }
+  }
+
+  async function doPDF2Docx(file) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(5, 'Memuat engine...')
+      await loadPDFjs()
+      await loadJSZip()
+
+      setProgress(15, 'Membaca PDF...')
+      const ab = await readAB(file)
+      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(ab) }).promise
+
+      const pageTexts = []
+      for (let i = 1; i <= pdf.numPages; i++) {
+        setProgress(Math.round(15 + (i / pdf.numPages) * 65), `Mengekstrak halaman ${i}/${pdf.numPages}...`)
+        const page = await pdf.getPage(i)
+        const tc = await page.getTextContent()
+
+        const byY = new Map()
+        for (const item of tc.items) {
+          if (!item.str) continue
+          const y = Math.round(item.transform[5] / 3) * 3
+          if (!byY.has(y)) byY.set(y, [])
+          byY.get(y).push({ x: item.transform[4], str: item.str })
+        }
+
+        const lines = [...byY.entries()]
+          .sort((a, b) => b[0] - a[0])
+          .map(([, items]) => items.sort((a, b) => a.x - b.x).map(i => i.str).join(''))
+          .filter(l => l.trim())
+
+        pageTexts.push(lines)
+      }
+
+      setProgress(84, 'Membuat dokumen Word...')
+
+      const paragraphs = pageTexts.map((lines, pi) => {
+        const paras = lines.map(l =>
+          `<w:p><w:r><w:t xml:space="preserve">${escXml(l)}</w:t></w:r></w:p>`
+        ).join('')
+        const brk = pi < pageTexts.length - 1
+          ? `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
+          : ''
+        return paras + brk
+      }).join('')
+
+      const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`
+      const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`
+      const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`
+      const wordRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`
+
+      const zip = new JSZip()
+      zip.file('[Content_Types].xml', contentTypes)
+      zip.file('_rels/.rels', rels)
+      zip.file('word/document.xml', docXml)
+      zip.file('word/_rels/document.xml.rels', wordRels)
+
+      setProgress(95, 'Menyimpan...')
+      const bytes = await zip.generateAsync({ type: 'uint8array' })
+      const outName = file.name.replace(/\.pdf$/i, '') + '.docx'
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+      results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(bytes.length) }]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doImgConvert(files, format) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    const mime = format === 'jpg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png'
+    const ext  = format === 'jpg' ? '.jpg' : format === 'webp' ? '.webp' : '.png'
+    const quality = format === 'jpg' ? 0.92 : 1.0
+    try {
+      const res = []
+      for (let i = 0; i < files.length; i++) {
+        setProgress(Math.round(5 + (i / files.length) * 88), `Mengkonversi ${i + 1}/${files.length}…`)
+        const img = await new Promise((resolve, reject) => {
+          const el = new Image()
+          const url = URL.createObjectURL(files[i])
+          el.onload = () => { URL.revokeObjectURL(url); resolve(el) }
+          el.onerror = reject
+          el.src = url
+        })
+        const cv = document.createElement('canvas')
+        cv.width = img.naturalWidth; cv.height = img.naturalHeight
+        const ctx = cv.getContext('2d')
+        if (format === 'jpg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height) }
+        ctx.drawImage(img, 0, 0)
+        const dataUrl  = cv.toDataURL(mime, quality)
+        const outName  = files[i].name.replace(/\.[^.]+$/, '') + ext
+        res.push(makeImgResult(dataUrl, outName))
+      }
+      results.value = res
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doExcel2Csv(file) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(20, 'Memuat library…')
+      await loadXLSX()
+      setProgress(55, 'Membaca file Excel…')
+      const ab = await readAB(file)
+      const wb = window.XLSX.read(new Uint8Array(ab), { type: 'array' })
+      setProgress(80, 'Mengkonversi ke CSV…')
+      const parts = wb.SheetNames.map((name) => {
+        const csv = window.XLSX.utils.sheet_to_csv(wb.Sheets[name])
+        return wb.SheetNames.length > 1 ? `# Sheet: ${name}\n${csv}` : csv
+      })
+      const blob    = new Blob([parts.join('\n\n')], { type: 'text/csv;charset=utf-8;' })
+      const outName = file.name.replace(/\.(xlsx?|ods|csv)$/i, '.csv')
+      results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(blob.size) }]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doWord2Txt(file) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(20, 'Memuat konverter Word…')
+      await loadMammoth()
+      setProgress(65, 'Mengekstrak teks…')
+      const ab = await readAB(file)
+      const r  = await window.mammoth.extractRawText({ arrayBuffer: ab })
+      setProgress(90, 'Menyimpan…')
+      const blob    = new Blob([r.value], { type: 'text/plain;charset=utf-8;' })
+      const outName = file.name.replace(/\.docx?$/i, '.txt')
+      results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(blob.size) }]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doRemovePages(file, toDelete) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(20, 'Membaca PDF…')
+      const ab    = await readAB(file)
+      const src   = await PDFDocument.load(ab)
+      const total = src.getPageCount()
+      const keep  = Array.from({ length: total }, (_, i) => i).filter((i) => !toDelete.includes(i))
+      if (!keep.length) throw new Error('Tidak ada halaman tersisa setelah penghapusan.')
+      setProgress(55, 'Menghapus halaman…')
+      const out   = await PDFDocument.create()
+      const pages = await out.copyPages(src, keep)
+      pages.forEach((p) => out.addPage(p))
+      setProgress(88, 'Menyimpan…')
+      results.value = [makeResult(await out.save(), 'pages_removed.pdf')]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doExtractPages(file, selected) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(20, 'Membaca PDF…')
+      const ab   = await readAB(file)
+      const src  = await PDFDocument.load(ab)
+      const idxs = [...selected].sort((a, b) => a - b)
+      if (!idxs.length) throw new Error('Pilih minimal satu halaman.')
+      setProgress(55, 'Mengekstrak halaman…')
+      const out   = await PDFDocument.create()
+      const pages = await out.copyPages(src, idxs)
+      pages.forEach((p) => out.addPage(p))
+      setProgress(88, 'Menyimpan…')
+      results.value = [makeResult(await out.save(), 'extracted.pdf')]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doWatermark(file, text, opts = {}) {
+    const { fontSize = 48, opacity = 0.15, angle = -45, color = 'gray' } = opts
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(15, 'Membaca PDF…')
+      const ab    = await readAB(file)
+      const doc   = await PDFDocument.load(ab)
+      const font  = await doc.embedFont(StandardFonts.HelveticaBold)
+      const pages = doc.getPages()
+      const colorMap = { black: rgb(0,0,0), gray: rgb(0.5,0.5,0.5), white: rgb(1,1,1) }
+      const c = colorMap[color] ?? colorMap.gray
+      const tw = font.widthOfTextAtSize(text, fontSize)
+      pages.forEach((pg, i) => {
+        setProgress(Math.round(15 + (i / pages.length) * 72), `Halaman ${i + 1}…`)
+        const { width, height } = pg.getSize()
+        pg.drawText(text, {
+          x: (width - tw) / 2,
+          y: height / 2 - fontSize / 2,
+          size: fontSize,
+          font,
+          color: c,
+          opacity,
+          rotate: degrees(angle),
+        })
+      })
+      setProgress(90, 'Menyimpan…')
+      results.value = [makeResult(await doc.save(), 'watermarked.pdf')]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doPDF2Xlsx(file) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(5, 'Memuat engine...')
+      await loadPDFjs()
+      await loadXLSX()
+
+      setProgress(15, 'Membaca PDF...')
+      const ab = await readAB(file)
+      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(ab) }).promise
+
+      const wb = window.XLSX.utils.book_new()
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        setProgress(Math.round(15 + (i / pdf.numPages) * 75), `Mengekstrak halaman ${i}/${pdf.numPages}...`)
+        const page = await pdf.getPage(i)
+        const tc = await page.getTextContent()
+
+        const byY = new Map()
+        for (const item of tc.items) {
+          if (!item.str.trim()) continue
+          const y = Math.round(item.transform[5] / 4) * 4
+          if (!byY.has(y)) byY.set(y, [])
+          byY.get(y).push({ x: item.transform[4], str: item.str })
+        }
+
+        const rows = [...byY.entries()]
+          .sort((a, b) => b[0] - a[0])
+          .map(([, items]) => items.sort((a, b) => a.x - b.x).map(it => it.str))
+
+        const ws = window.XLSX.utils.aoa_to_sheet(rows)
+        const sheetName = pdf.numPages === 1 ? 'Sheet1' : `Halaman ${i}`
+        window.XLSX.utils.book_append_sheet(wb, ws, sheetName)
+      }
+
+      setProgress(93, 'Menyimpan...')
+      const bytes = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const outName = file.name.replace(/\.pdf$/i, '') + '.xlsx'
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(bytes.length) }]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    finally { processing.value = false }
+  }
+
   return {
     processing, progress, progLabel, results, errMsg,
     reset, fmtSize,
     doMerge, doSplit, doCompress, doRotate, doReorder,
     doImg2PDF, doPDF2Img, doPageNumber, doProtect, doUnlock,
+    doWord2PDF, doExcel2PDF, doPDF2Docx, doPDF2Xlsx,
+    doRemovePages, doExtractPages, doWatermark,
+    doImgConvert, doExcel2Csv, doWord2Txt,
   }
 }

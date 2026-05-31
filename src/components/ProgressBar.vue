@@ -26,7 +26,7 @@
           }"
         >
           <div class="step-dot">
-            <span v-if="value >= step.pct">✓</span>
+            <Check v-if="value >= step.pct" :size="10" :stroke-width="3" />
           </div>
           <span class="step-name">{{ step.name }}</span>
         </div>
@@ -37,6 +37,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { Check } from '@lucide/vue'
 
 const props = defineProps({
   value:  { type: Number, default: 0 },
@@ -44,10 +45,10 @@ const props = defineProps({
   steps:  {
     type: Array,
     default: () => [
-      { pct: 25,  name: 'Membaca' },
+      { pct: 25,  name: 'Membaca'    },
       { pct: 60,  name: 'Memproses' },
       { pct: 90,  name: 'Menyimpan' },
-      { pct: 100, name: 'Selesai' },
+      { pct: 100, name: 'Selesai'   },
     ],
   },
 })
@@ -72,27 +73,25 @@ const show = computed(() => props.value > 0)
   margin-bottom: 10px;
 }
 .prog-label { font-size: 13px; color: var(--text-2); font-weight: 500; }
-.prog-pct   { font-size: 13px; font-weight: 700; color: var(--red); font-variant-numeric: tabular-nums; }
+.prog-pct   { font-size: 13px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 
 .prog-track {
   position: relative;
-  height: 8px;
-  background: var(--border);
-  border-radius: 4px;
+  height: 5px;
+  background: var(--c-200);
+  border-radius: 99px;
   overflow: hidden;
   margin-bottom: 20px;
 }
 .prog-fill {
   height: 100%;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--red-dark), var(--red));
+  border-radius: 99px;
+  background: var(--c-900);
   transition: width .4s cubic-bezier(.16, 1, .3, 1);
   position: relative;
   z-index: 1;
 }
-.prog-fill.complete {
-  background: linear-gradient(90deg, #059669, #10b981);
-}
+.prog-fill.complete { background: var(--green); }
 
 .prog-shimmer {
   position: absolute;
@@ -100,7 +99,7 @@ const show = computed(() => props.value > 0)
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255,255,255,.35) 50%,
+    rgba(255,255,255,.4) 50%,
     transparent 100%
   );
   background-size: 200% 100%;
@@ -128,27 +127,26 @@ const show = computed(() => props.value > 0)
 .step-dot {
   width: 20px; height: 20px;
   border-radius: 50%;
-  border: 2px solid var(--border);
+  border: 1.5px solid var(--c-300);
   background: var(--surface);
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px;
   color: var(--surface);
   transition: all .3s cubic-bezier(.16,1,.3,1);
 }
 .prog-step.done .step-dot {
-  background: #10b981;
-  border-color: #10b981;
-  color: #fff;
-  transform: scale(1.1);
+  background: var(--c-950);
+  border-color: var(--c-950);
+  color: var(--c-white);
+  transform: scale(1.05);
 }
 .prog-step.active .step-dot {
-  border-color: var(--red);
-  background: var(--red-light);
+  border-color: var(--c-700);
+  background: var(--c-100);
   animation: pulse-dot .8s ease infinite;
 }
 @keyframes pulse-dot {
   0%, 100% { transform: scale(1); }
-  50%       { transform: scale(1.2); }
+  50%       { transform: scale(1.15); }
 }
 
 .step-name {
@@ -161,8 +159,8 @@ const show = computed(() => props.value > 0)
   max-width: 70px;
   transition: color .3s;
 }
-.prog-step.done .step-name   { color: #059669; font-weight: 500; }
-.prog-step.active .step-name { color: var(--red); font-weight: 500; }
+.prog-step.done .step-name   { color: var(--c-700); font-weight: 500; }
+.prog-step.active .step-name { color: var(--text);  font-weight: 500; }
 
 .prog-fade-enter-active, .prog-fade-leave-active { transition: all .3s ease; }
 .prog-fade-enter-from, .prog-fade-leave-to       { opacity: 0; transform: translateY(6px); }

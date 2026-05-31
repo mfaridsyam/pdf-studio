@@ -2,33 +2,40 @@
   <div id="app-root">
 
     <Transition name="slide-banner">
-      <div class="install-banner ios-banner" v-if="showIosBanner">
-        <span>📲</span>
+      <div class="install-banner" v-if="showIosBanner">
+        <Smartphone :size="15" />
         <p>
-          Instal: tekan
-          <span class="ios-share-icon">⎙</span>
-          lalu <strong>"Add to Home Screen"</strong>
+          Instal: tekan tombol <strong>Share</strong>
+          lalu pilih <strong>"Add to Home Screen"</strong>
         </p>
-        <button class="banner-close" @click="dismissIos">✕</button>
+        <button class="banner-close" @click="dismissIos">
+          <X :size="15" />
+        </button>
       </div>
     </Transition>
 
     <header class="navbar">
       <div class="navbar-inner">
         <RouterLink to="/" class="logo">
-          <div class="logo-mark">P</div>
+          <div class="logo-mark">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
+              <path d="M10 2v3h3M5 8h6M5 11h4"/>
+            </svg>
+          </div>
           <span class="logo-name">PDF<span>Studio</span></span>
         </RouterLink>
         <div class="nav-spacer"></div>
         <button class="install-btn" v-if="isMobile && !isInstalled" @click="handleInstall">
-          📲 Instal App
+          <Download :size="14" />
+          Instal App
         </button>
       </div>
     </header>
 
     <RouterView v-slot="{ Component }">
       <Transition name="fade" mode="out-in">
-        <component :is="Component" :active-cat="activeCat" @set-cat="activeCat = $event" />
+        <component :is="Component" :key="route.path" :active-cat="activeCat" @set-cat="activeCat = $event" />
       </Transition>
     </RouterView>
 
@@ -45,10 +52,11 @@
 <script setup>
 import { ref, onMounted, provide } from 'vue'
 import { useRoute } from 'vue-router'
+import { Smartphone, X, Download } from '@lucide/vue'
 
 const route          = useRoute()
 const deferredPrompt = ref(null)
-const showIosBanner     = ref(false)
+const showIosBanner  = ref(false)
 const toastMsg       = ref('')
 const activeCat      = ref('all')
 
@@ -92,7 +100,7 @@ async function installPWA() {
   if (!deferredPrompt.value) return
   deferredPrompt.value.prompt()
   await deferredPrompt.value.userChoice
-  deferredPrompt.value    = null
+  deferredPrompt.value = null
 }
 
 function showToast(msg, ms = 2500) {
@@ -106,8 +114,8 @@ provide('showToast', showToast)
 #app-root { display: flex; flex-direction: column; min-height: 100vh; }
 
 .install-banner {
-  background: var(--red);
-  color: #fff;
+  background: var(--c-950);
+  color: var(--c-white);
   padding: 10px 20px;
   display: flex;
   align-items: center;
@@ -115,33 +123,28 @@ provide('showToast', showToast)
   flex-wrap: wrap;
   justify-content: center;
 }
-.install-banner p { font-size: 13.5px; font-weight: 500; line-height: 1.5; }
+.install-banner p { font-size: 13px; font-weight: 400; line-height: 1.5; }
 
 .banner-close {
   background: none;
   border: none;
-  color: rgba(255,255,255,.75);
+  color: var(--c-400);
   cursor: pointer;
-  font-size: 17px;
-  padding: 2px 6px;
+  padding: 3px;
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
+  transition: color .15s;
 }
-
-.ios-banner { background: #1c1c1e; }
-.ios-share-icon {
-  display: inline-block;
-  background: rgba(255,255,255,.2);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 14px;
-  margin: 0 2px;
-}
+.banner-close:hover { color: var(--c-white); }
 
 .slide-banner-enter-active, .slide-banner-leave-active { transition: all .3s ease; }
 .slide-banner-enter-from, .slide-banner-leave-to { opacity: 0; transform: translateY(-100%); }
 
 .navbar {
-  background: var(--surface);
+  background: rgba(255,255,255,.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -151,7 +154,7 @@ provide('showToast', showToast)
   max-width: 1100px;
   margin: 0 auto;
   padding: 0 24px;
-  height: 60px;
+  height: 58px;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -164,14 +167,20 @@ provide('showToast', showToast)
   flex-shrink: 0;
 }
 .logo-mark {
-  width: 32px; height: 32px;
-  background: var(--red);
-  border-radius: 8px;
+  width: 30px; height: 30px;
+  background: var(--c-950);
+  border-radius: 7px;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 14px; font-weight: 700;
+  color: var(--c-white);
+  flex-shrink: 0;
 }
-.logo-name { font-size: 16px; font-weight: 600; color: var(--text); }
-.logo-name span { color: var(--red); }
+.logo-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -.3px;
+}
+.logo-name span { color: var(--c-500); font-weight: 400; }
 
 .nav-spacer { flex: 1; }
 
@@ -180,19 +189,19 @@ provide('showToast', showToast)
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  background: var(--red);
+  background: var(--c-950);
   border: none;
   border-radius: 7px;
   font-size: 13px;
-  font-weight: 600;
-  color: #fff;
+  font-weight: 500;
+  color: var(--c-white);
   cursor: pointer;
   font-family: var(--font);
   transition: all .2s ease;
   white-space: nowrap;
   flex-shrink: 0;
 }
-.install-btn:hover { background: var(--red-dark); transform: translateY(-1px); }
+.install-btn:hover { background: var(--c-800); transform: translateY(-1px); }
 .install-btn:active { transform: translateY(0); }
 
 .footer {
@@ -203,13 +212,13 @@ provide('showToast', showToast)
   text-align: center;
 }
 .footer p { font-size: 13px; color: var(--text-3); }
-.footer a { color: var(--red); text-decoration: none; font-weight: 500; }
-.footer a:hover { text-decoration: underline; }
+.footer a { color: var(--text-2); text-decoration: none; font-weight: 500; transition: color .15s; }
+.footer a:hover { color: var(--text); }
 
 .toast {
   position: fixed; bottom: 24px; left: 50%;
   transform: translateX(-50%);
-  background: #1f2937; color: #fff;
+  background: var(--c-950); color: var(--c-white);
   padding: 10px 20px; border-radius: 8px;
   font-size: 13.5px; font-weight: 500;
   z-index: 9999;
@@ -218,6 +227,9 @@ provide('showToast', showToast)
 }
 .toast-anim-enter-active, .toast-anim-leave-active { transition: all .3s cubic-bezier(.16,1,.3,1); }
 .toast-anim-enter-from, .toast-anim-leave-to { opacity: 0; transform: translateX(-50%) translateY(12px); }
+
+.fade-enter-active, .fade-leave-active { transition: opacity .15s ease; }
+.fade-enter-from, .fade-leave-to       { opacity: 0; }
 
 @media (max-width: 640px) {
   .navbar-inner { padding: 0 16px; }

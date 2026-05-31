@@ -13,35 +13,42 @@
       @change="onInput"
       ref="inputRef"
     />
-    <div class="dz-icon">{{ icon }}</div>
+    <div class="dz-icon">
+      <AppIcon :name="icon" :size="32" :stroke-width="1.5" />
+    </div>
     <div class="dz-title">{{ title }}</div>
-    <div class="dz-sub">{{ subtitle }}</div>
+    <div class="dz-sub" v-if="subtitle">{{ subtitle }}</div>
     <button class="dz-btn" @click.prevent="inputRef?.click()">
-      + Pilih {{ multiple ? 'File' : 'File' }}
+      <Plus :size="14" />
+      Pilih {{ multiple ? 'File' : 'File' }}
     </button>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
+import { Plus } from '@lucide/vue'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps({
-  accept:   { type: String, default: '.pdf' },
-  multiple: { type: Boolean, default: false },
-  icon:     { type: String, default: '📂' },
-  title:    { type: String, default: 'Pilih atau seret file' },
-  subtitle: { type: String, default: '' },
-  fileType: { type: String, default: 'pdf' },
+  accept:   { type: String,  default: '.pdf'        },
+  multiple: { type: Boolean, default: false          },
+  icon:     { type: String,  default: 'UploadCloud'  },
+  title:    { type: String,  default: 'Pilih atau seret file' },
+  subtitle: { type: String,  default: ''             },
+  fileType: { type: String,  default: 'pdf'          },
 })
 
-const emit = defineEmits(['files'])
+const emit       = defineEmits(['files'])
 const isDragOver = ref(false)
 const inputRef   = ref(null)
 
 function validate(files) {
   return files.filter((f) => {
-    if (props.fileType === 'pdf') return f.type === 'application/pdf' || f.name.endsWith('.pdf')
-    if (props.fileType === 'img') return f.type.startsWith('image/')
+    if (props.fileType === 'pdf')   return f.type === 'application/pdf' || f.name.endsWith('.pdf')
+    if (props.fileType === 'img')   return f.type.startsWith('image/')
+    if (props.fileType === 'docx')  return /\.docx?$/i.test(f.name) || f.type.includes('wordprocessingml') || f.type === 'application/msword'
+    if (props.fileType === 'excel') return /\.(xlsx?|csv|ods)$/i.test(f.name) || f.type.includes('spreadsheetml') || f.type === 'text/csv'
     return true
   })
 }
@@ -72,8 +79,8 @@ function onDrop(e) {
 }
 .dropzone:hover,
 .dropzone.over {
-  border-color: var(--red);
-  background: var(--red-light);
+  border-color: var(--c-400);
+  background: var(--c-100);
 }
 .dropzone input[type='file'] {
   position: absolute;
@@ -83,15 +90,17 @@ function onDrop(e) {
   width: 100%;
   height: 100%;
 }
-.dz-icon  { font-size: 36px; margin-bottom: 10px; }
-.dz-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.dz-icon  { color: var(--c-400); margin-bottom: 12px; display: flex; justify-content: center; }
+.dropzone:hover .dz-icon,
+.dropzone.over .dz-icon { color: var(--c-700); }
+.dz-title { font-size: 14.5px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
 .dz-sub   { font-size: 13px; color: var(--text-2); margin-bottom: 18px; }
 .dz-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 8px 18px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   border: 1.5px solid var(--border);
