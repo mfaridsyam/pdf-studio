@@ -82,6 +82,19 @@
                 </div>
               </div>
 
+              <div class="opts-block">
+                <span class="opts-label">Ukuran Halaman</span>
+                <div class="opts-row">
+                  <button class="chip" :class="{ sel: mergeSize === 'original' }" @click="mergeSize = 'original'">Ukuran Asli</button>
+                  <button class="chip" :class="{ sel: mergeSize === 'fit' }"      @click="mergeSize = 'fit'">Samakan ke A4</button>
+                </div>
+                <p class="opts-hint">
+                  {{ mergeSize === 'original'
+                    ? 'Setiap halaman mempertahankan ukuran aslinya.'
+                    : 'Halaman non-A4 diskalakan agar pas di A4. Teks tetap tajam.' }}
+                </p>
+              </div>
+
               <div class="action-bar">
                 <span class="file-count">{{ files.length }} file dipilih</span>
                 <button class="btn btn-primary" :disabled="files.length < 2 || processing" @click="run">
@@ -1069,6 +1082,12 @@
                 <AlertTriangle :size="15" /> {{ errMsg }}
               </div>
             </Transition>
+            <Transition name="err-fade">
+              <div class="note note-blue" style="margin-top:14px" v-if="noticeMsg">
+                <Info :size="14" style="flex-shrink:0;margin-top:1px" />
+                <span>{{ noticeMsg }}</span>
+              </div>
+            </Transition>
             <ResultBox :results="results" v-if="!['compress','word2pdf','excel2pdf','html2pdf'].includes(tool.id)" />
           </template>
 
@@ -1108,7 +1127,7 @@ const showToast = inject('showToast', () => {})
 const tool = computed(() => useTool(route.params.id))
 
 const {
-  processing, progress, progLabel, results, errMsg, reset, fmtSize,
+  processing, progress, progLabel, results, errMsg, noticeMsg, reset, fmtSize,
   doMerge, doSplit, doCompress, doRotate, doReorder,
   doImg2PDF, doPDF2Img, doPageNumber, doProtect, doUnlock,
   doWord2PDF, doExcel2PDF, doPDF2Docx, doPDF2Xlsx,
@@ -1645,6 +1664,7 @@ onBeforeUnmount(reset)
 .opts-block { margin-top: 20px; }
 .opts-label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-3); margin-bottom: 8px; }
 .opts-row   { display: flex; gap: 8px; flex-wrap: wrap; }
+.opts-hint  { margin-top: 8px; font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
 .chip       { padding: 7px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; color: var(--text-2); cursor: pointer; background: var(--surface); font-family: var(--font); transition: all .15s ease; }
 .chip:hover { border-color: var(--border-2); color: var(--text); }
 .chip.sel   { border-color: var(--c-900); color: var(--c-950); background: var(--c-100); }

@@ -22,7 +22,7 @@ export const TOOLS = [
   { id: 'reorder',      cat: 'atur',     icon: 'ListOrdered',     name: 'Atur PDF',          desc: 'Sortir halaman file PDF Anda sesuai keinginan. Hapus atau tambahkan halaman PDF ke dokumen Anda dengan mudah.',                               ...O  },
   { id: 'pagenumber',   cat: 'atur',     icon: 'Hash',            name: 'Nomor Halaman',     desc: 'Tambahkan nomor halaman ke PDF dengan mudah. Pilih posisi, dimensi, tipografi Anda.',                                                         ...A  },
   { id: 'crop',         cat: 'atur',     icon: 'Crop',            name: 'Potong PDF',        desc: 'Potong margin dari dokumen PDF atau pilih area tertentu, kemudian terapkan perubahan ke satu halaman atau ke seluruh dokumen.',                ...K  },
-  { id: 'repair',       cat: 'atur',     icon: 'Wrench',          name: 'Perbaiki PDF',      desc: 'Perbaiki PDF yang rusak dan pulihkan data dari PDF yang rusak. Perbaiki file PDF dengan alat Perbaikan kami.',                                 ...G  },
+  { id: 'repair',       cat: 'atur',     icon: 'Wrench',          name: 'Perbaiki PDF',      desc: 'Pulihkan PDF yang gagal dibuka: header yang rusak dibetulkan dan struktur berkas disusun ulang.',                                            ...G  },
 
   // ── EDIT PDF ──────────────────────────────────────────────────
   { id: 'watermark',    cat: 'edit',     icon: 'Layers',          name: 'Tanda Air',         desc: 'Tempelkan gambar atau teks di atas PDF Anda dalam hitungan detik. Pilih tipografi, transparansi dan posisinya.',                              ...B  },
@@ -35,12 +35,12 @@ export const TOOLS = [
 
   // ── KONVERSI ──────────────────────────────────────────────────
   { id: 'pdf2img',      cat: 'konversi', icon: 'Camera',          name: 'PDF ke JPG',        desc: 'Konversi setiap halaman PDF ke JPG atau ekstrak semua gambar yang tersimpan dalam PDF.',                                                      ...O  },
-  { id: 'pdf2docx',     cat: 'konversi', icon: 'FileOutput',      name: 'PDF ke Word',       desc: 'Konversi file PDF dengan mudah menjadi dokumen DOC dan DOCX yang mudah diedit.',                                                              ...WB },
+  { id: 'pdf2docx',     cat: 'konversi', icon: 'FileOutput',      name: 'PDF ke Word',       desc: 'Ambil teks dari PDF menjadi dokumen DOCX yang siap diedit. Gambar dan tata letak tidak ikut terbawa.',                                       ...WB },
   { id: 'pdf2xlsx',     cat: 'konversi', icon: 'FileSpreadsheet', name: 'PDF ke Excel',      desc: 'Ambil data langsung dari PDF menjadi spreadsheet Excel dalam beberapa detik.',                                                                 ...XG },
   { id: 'img2pdf',      cat: 'konversi', icon: 'ImagePlus',       name: 'JPG ke PDF',        desc: 'Konversi gambar JPG ke PDF dalam hitungan detik. Sesuaikan orientasi dan margin dengan mudah.',                                                ...O  },
   { id: 'word2pdf',     cat: 'konversi', icon: 'FileText',        name: 'Word ke PDF',       desc: 'Buat file DOC dan DOCX mudah dibaca dengan dikonversi ke PDF.',                                                                                ...WB },
   { id: 'excel2pdf',    cat: 'konversi', icon: 'BarChart2',       name: 'Excel ke PDF',      desc: 'Buat spreadsheet EXCEL mudah dibaca dengan dikonversi ke PDF.',                                                                                ...XG },
-  { id: 'html2pdf',     cat: 'konversi', icon: 'Code2',           name: 'HTML ke PDF',       desc: 'Konversi halaman web di HTML ke PDF. Salin dan tempelkan URL dari halaman yang Anda inginkan.',                                                ...A  },
+  { id: 'html2pdf',     cat: 'konversi', icon: 'Code2',           name: 'HTML ke PDF',       desc: 'Tempelkan kode HTML — dokumen lengkap atau potongan — lalu cetak hasilnya sebagai PDF.',                                                     ...A  },
   { id: 'img2jpg',      cat: 'konversi', icon: 'Image',           name: 'PNG ke JPG',        desc: 'Konversi gambar PNG atau WebP ke format JPG dengan cepat dan mudah.',                                                                          ...A  },
   { id: 'img2png',      cat: 'konversi', icon: 'Image',           name: 'JPG ke PNG',        desc: 'Konversi gambar JPG atau WebP ke format PNG berkualitas tinggi.',                                                                               ...G  },
   { id: 'img2webp',     cat: 'konversi', icon: 'Image',           name: 'Ke Format WebP',    desc: 'Konversi gambar JPG atau PNG ke format WebP modern untuk web yang lebih cepat.',                                                               ...B  },

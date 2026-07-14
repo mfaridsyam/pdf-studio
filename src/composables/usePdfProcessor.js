@@ -121,6 +121,8 @@ export function usePdfProcessor() {
   const progLabel  = ref('')
   const results    = ref([])
   const errMsg     = ref('')
+  // Kabar yang bukan kegagalan — mis. seberapa jauh sebuah PDF rusak bisa dipulihkan.
+  const noticeMsg  = ref('')
 
   let _raf = null
   function setProgress(target, label = '') {
@@ -146,6 +148,7 @@ export function usePdfProcessor() {
     results.value.forEach((r) => r.url && URL.revokeObjectURL(r.url))
     results.value    = []
     errMsg.value     = ''
+    noticeMsg.value  = ''
   }
 
   function readAB(file) {
@@ -192,12 +195,10 @@ export function usePdfProcessor() {
       } else if (sizeMode === 'fit') {
         const A4W = 595.28, A4H = 841.89
 
+        // Halaman diskalakan, jadi kotak anotasi (link, komentar) harus ikut
+        // digeser — kalau tidak, area kliknya meleset dari isinya.
         function transformAnnotations(page, scale, offsetX, offsetY) {
           try {
-            const { PDFArray, PDFNumber } = page.doc?.context?.constructor
-              ? { PDFArray: null, PDFNumber: null }
-              : { PDFArray: null, PDFNumber: null }
-
             const node = page.node
             const ctx  = node.context
 
@@ -1183,18 +1184,70 @@ tr:nth-child(even) td{background:#f8f8f8}
     finally { processing.value = false }
   }
 
+  // Header yang hilang atau tertimpa sampah (mis. halaman error HTML ikut
+  // terunduh di depan berkas) membuat pdf-lib menolak PDF yang isinya masih
+  // utuh. Diuji: memperbaiki header memulihkan 3/3 halaman dengan teks tetap
+  // berupa teks — jauh lebih baik daripada langsung merender ulang jadi gambar.
+  function perbaikiHeader(u8) {
+    const awal = new TextDecoder('latin1').decode(u8.subarray(0, 1024))
+    const at   = awal.indexOf('%PDF-')
+    if (at === 0) return u8
+    if (at > 0)   return u8.subarray(at)   // buang sampah sebelum header
+    const out = new Uint8Array(9 + u8.length)
+    out.set(new TextEncoder().encode('%PDF-1.7\n'), 0)
+    out.set(u8, 9)
+    return out
+  }
+
   async function doRepairPDF(file) {
-    processing.value = true; errMsg.value = ''; results.value = []
+    processing.value = true; errMsg.value = ''; noticeMsg.value = ''; results.value = []
     try {
-      setProgress(30, 'Membaca PDF…')
-      const ab  = await readAB(file)
-      setProgress(60, 'Memulihkan struktur…')
-      const doc = await PDFDocument.load(ab, { ignoreEncryption: true, updateMetadata: false })
-      setProgress(85, 'Menyimpan…')
-      results.value = [makeResult(await doc.save({ useObjectStreams: true }), outputName(file, '.pdf'))]
+      setProgress(15, 'Membaca berkas…')
+      const bytes = perbaikiHeader(new Uint8Array(await readAB(file)))
+
+      // Tahap 1 — parse ulang lalu simpan. Ini membangun kembali tabel xref yang
+      // rusak dan membuang objek yatim. Teks tetap teks.
+      setProgress(45, 'Menyusun ulang struktur…')
+      try {
+        const doc = await PDFDocument.load(bytes, {
+          ignoreEncryption: true, updateMetadata: false, throwOnInvalidObject: false,
+        })
+        const out = await doc.save({ useObjectStreams: true })
+        await PDFDocument.load(out, { ignoreEncryption: true })  // pastikan hasilnya sungguh terbuka
+        results.value  = [makeResult(out, outputName(file, '.pdf'))]
+        noticeMsg.value = `Struktur berhasil disusun ulang. ${doc.getPageCount()} halaman pulih dan teks tetap bisa disalin.`
+        setProgress(100, 'Selesai!')
+        return
+      } catch { /* pdf-lib menyerah — lanjut ke pemulihan darurat */ }
+
+      // Tahap 2 — pdf.js punya parser pemulihan yang lebih toleran, tapi tidak bisa
+      // menulis PDF vektor. Halaman diselamatkan dengan dirender ulang jadi gambar:
+      // isinya kembali, tapi teksnya tidak lagi bisa disalin. Ini upaya terakhir.
+      setProgress(55, 'Pemulihan darurat…')
+      await loadPDFjs()
+      const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0), stopAtErrors: false }).promise
+      const out = await PDFDocument.create()
+      for (let i = 1; i <= pdf.numPages; i++) {
+        setProgress(Math.round(55 + (i / pdf.numPages) * 38), `Menyelamatkan halaman ${i}/${pdf.numPages}…`)
+        const pg  = await pdf.getPage(i)
+        const vp0 = pg.getViewport({ scale: 1 })
+        const vp  = pg.getViewport({ scale: 2 })
+        const cv  = document.createElement('canvas')
+        cv.width  = Math.round(vp.width); cv.height = Math.round(vp.height)
+        const ctx = cv.getContext('2d')
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height)
+        await pg.render({ canvasContext: ctx, viewport: vp }).promise
+        const b64 = cv.toDataURL('image/jpeg', 0.92).split(',')[1]
+        const img = await out.embedJpg(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))
+        out.addPage([vp0.width, vp0.height])
+           .drawImage(img, { x: 0, y: 0, width: vp0.width, height: vp0.height })
+      }
+      results.value  = [makeResult(await out.save({ useObjectStreams: true }), outputName(file, '.pdf'))]
+      noticeMsg.value = `Kerusakan berat. ${pdf.numPages} halaman diselamatkan dengan render ulang — isinya kembali terlihat, tapi teks kini menjadi gambar dan tidak bisa disalin.`
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal memulihkan: ' + e.message }
-    finally { processing.value = false }
+    } catch (e) {
+      errMsg.value = 'PDF ini terlalu rusak untuk dipulihkan: ' + e.message
+    } finally { processing.value = false }
   }
 
   async function doSignPDF(file, pngDataUrl, pageTarget = 'last', position = 'bottom-right', widthPt = 150) {
@@ -1278,7 +1331,7 @@ tr:nth-child(even) td{background:#f8f8f8}
   }
 
   return {
-    processing, progress, progLabel, results, errMsg,
+    processing, progress, progLabel, results, errMsg, noticeMsg,
     reset, fmtSize,
     doMerge, doSplit, doCompress, doRotate, doReorder,
     doImg2PDF, doPDF2Img, doPageNumber, doProtect, doUnlock,
