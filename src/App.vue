@@ -34,9 +34,7 @@
     </header>
 
     <RouterView v-slot="{ Component }">
-      <Transition name="fade" mode="out-in">
-        <component :is="Component" :key="route.path" :active-cat="activeCat" @set-cat="activeCat = $event" />
-      </Transition>
+      <component :is="Component" :key="route.path" :active-cat="activeCat" @set-cat="activeCat = $event" />
     </RouterView>
 
     <footer class="footer">
@@ -142,19 +140,19 @@ provide('showToast', showToast)
 .slide-banner-enter-from, .slide-banner-leave-to { opacity: 0; transform: translateY(-100%); }
 
 .navbar {
-  background: rgba(255,255,255,.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(0,0,0,.07);
   position: sticky;
   top: 0;
   z-index: 100;
 }
 .navbar-inner {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 0 24px;
-  height: 58px;
+  padding: 0 28px;
+  height: 62px;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -168,19 +166,19 @@ provide('showToast', showToast)
 }
 .logo-mark {
   width: 30px; height: 30px;
-  background: var(--c-950);
+  background: #E02B20;
   border-radius: 7px;
   display: flex; align-items: center; justify-content: center;
   color: var(--c-white);
   flex-shrink: 0;
 }
 .logo-name {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -.3px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--c-950);
+  letter-spacing: -.4px;
 }
-.logo-name span { color: var(--c-500); font-weight: 400; }
+.logo-name span { color: #E02B20; font-weight: 800; }
 
 .nav-spacer { flex: 1; }
 
@@ -206,14 +204,14 @@ provide('showToast', showToast)
 
 .footer {
   margin-top: auto;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-  padding: 20px 24px;
+  border-top: 1px solid rgba(0,0,0,.07);
+  background: #fff;
+  padding: 24px 28px;
   text-align: center;
 }
 .footer p { font-size: 13px; color: var(--text-3); }
-.footer a { color: var(--text-2); text-decoration: none; font-weight: 500; transition: color .15s; }
-.footer a:hover { color: var(--text); }
+.footer a { color: #E02B20; text-decoration: none; font-weight: 500; transition: color .15s; }
+.footer a:hover { color: #b91c1c; }
 
 .toast {
   position: fixed; bottom: 24px; left: 50%;
@@ -228,8 +226,6 @@ provide('showToast', showToast)
 .toast-anim-enter-active, .toast-anim-leave-active { transition: all .3s cubic-bezier(.16,1,.3,1); }
 .toast-anim-enter-from, .toast-anim-leave-to { opacity: 0; transform: translateX(-50%) translateY(12px); }
 
-.fade-enter-active, .fade-leave-active { transition: opacity .15s ease; }
-.fade-enter-from, .fade-leave-to       { opacity: 0; }
 
 @media (max-width: 640px) {
   .navbar-inner { padding: 0 16px; }

@@ -1,28 +1,28 @@
 <template>
-  <div class="tool-view">
-    <div class="tv-inner">
+  <div class="tool-page" :style="tool ? { '--tool-clr': tool.bg } : {}">
 
-      <div v-if="!tool" class="not-found">
-        <p>Alat tidak ditemukan.</p>
-        <RouterLink to="/">
-          <ChevronLeft :size="14" style="vertical-align:middle" /> Kembali
-        </RouterLink>
+    <div v-if="!tool" class="not-found-page">
+      <p>Alat tidak ditemukan.</p>
+      <RouterLink to="/"><ChevronLeft :size="14" style="vertical-align:middle" /> Kembali</RouterLink>
+    </div>
+
+    <template v-else>
+      <!-- Tool Hero -->
+      <div class="tool-hero">
+        <div class="tool-hero-inner">
+          <RouterLink to="/" class="th-back"><ChevronLeft :size="14" /> Semua Alat</RouterLink>
+          <div class="th-main">
+            <div class="th-icon"><AppIcon :name="tool.icon" :size="36" :stroke-width="1.6" /></div>
+            <h1 class="th-title">{{ tool.name }}</h1>
+            <p class="th-desc">{{ tool.desc }}</p>
+          </div>
+        </div>
       </div>
 
-      <template v-else>
-        <div class="tv-header">
-          <RouterLink to="/" class="back-btn">
-            <ChevronLeft :size="15" />
-            Semua Alat
-          </RouterLink>
-          <span class="sep">/</span>
-          <div class="tv-icon">
-            <AppIcon :name="tool.icon" :size="16" :stroke-width="1.75" />
-          </div>
-          <h1>{{ tool.name }}</h1>
-        </div>
-
-        <div class="workspace-card">
+      <!-- Workspace -->
+      <div class="tool-workspace">
+        <div class="workspace-inner">
+          <div class="workspace-card">
 
           <!-- MERGE -->
           <template v-if="tool.id === 'merge'">
@@ -73,7 +73,7 @@
                   @click="$refs.mergeAddInput.click()"
                   @dragover.prevent="mgAddOver = true"
                   @dragleave="mgAddOver = false"
-                  @drop.prevent="onMergeAddDrop"
+                  @drop.prevent.stop="onMergeAddDrop"
                   :class="{ 'mg-add-over': mgAddOver }"
                 >
                   <input ref="mergeAddInput" type="file" accept=".pdf" multiple @change="onMergeAdd" style="display:none" />
@@ -129,49 +129,68 @@
           <!-- COMPRESS -->
           <template v-if="tool.id === 'compress'">
 
+            <!-- Hasil kompresi -->
             <div class="compress-result" v-if="compressResult && results.length">
-              <div class="cr-circle-wrap">
-                <svg class="cr-circle" viewBox="0 0 120 120">
-                  <circle cx="60" cy="60" r="52" fill="none" stroke="var(--c-200)" stroke-width="8"/>
-                  <circle cx="60" cy="60" r="52" fill="none" stroke="var(--c-950)" stroke-width="8"
-                    stroke-linecap="round"
-                    :stroke-dasharray="326.7"
-                    :stroke-dashoffset="326.7 * (1 - Math.min(compressResult.savedPct, 100) / 100)"
-                    transform="rotate(-90 60 60)"
-                    style="transition: stroke-dashoffset 1.2s cubic-bezier(.16,1,.3,1)"
-                  />
-                </svg>
-                <div class="cr-circle-text">
-                  <span class="cr-pct">{{ compressResult.savedPct }}%</span>
-                  <span class="cr-label">tersimpan</span>
+              <template v-if="compressResult.bigger">
+                <div class="cr-info cr-info-full">
+                  <h3 style="color:var(--text)">PDF sudah optimal</h3>
+                  <p style="font-size:13px;color:var(--text-2);margin-top:6px;line-height:1.5">
+                    PDF ini tidak dapat dikecilkan lebih lanjut dengan metode ini. Kemungkinan PDF sudah berisi teks/vektor yang sangat efisien atau gambar yang sudah dikompresi.
+                  </p>
+                  <div class="note note-blue" style="margin-top:14px;font-size:12.5px">
+                    <Info :size="14" style="flex-shrink:0;margin-top:1px" />
+                    <span>Coba mode <strong>Berbagi (72 DPI)</strong> atau <strong>Maks</strong> untuk PDF berbasis gambar/scan. Untuk PDF teks murni, kompresi lebih lanjut tidak dimungkinkan di browser.</span>
+                  </div>
+                  <div class="cr-actions" style="margin-top:16px">
+                    <button class="btn btn-outline" @click="compressResult = null; reset(); files = []">Coba Level Lain</button>
+                  </div>
                 </div>
-              </div>
-              <div class="cr-info">
-                <h3>PDF sudah dikompres!</h3>
-                <p class="cr-sizes">
-                  <span>{{ fmtSize(compressResult.originalSize) }}</span>
-                  <ArrowRight :size="14" class="cr-arrow" />
-                  <span class="cr-new">{{ fmtSize(compressResult.compressedSize) }}</span>
-                </p>
-                <p class="cr-saved">Menghemat {{ fmtSize(compressResult.saved) }}</p>
-                <div class="cr-actions">
-                  <button class="btn btn-primary" @click="dl(results[0])">
-                    <Download :size="14" /> Unduh PDF
-                  </button>
-                  <button class="btn btn-outline" @click="compressResult = null; results.value = []; files = []">
-                    Kompres File Lain
-                  </button>
+              </template>
+              <template v-else>
+                <div class="cr-circle-wrap">
+                  <svg class="cr-circle" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="52" fill="none" stroke="var(--c-200)" stroke-width="8"/>
+                    <circle cx="60" cy="60" r="52" fill="none" :stroke="tool.bg" stroke-width="8"
+                      stroke-linecap="round"
+                      :stroke-dasharray="326.7"
+                      :stroke-dashoffset="326.7 * (1 - Math.min(compressResult.savedPct, 100) / 100)"
+                      transform="rotate(-90 60 60)"
+                      style="transition: stroke-dashoffset 1.2s cubic-bezier(.16,1,.3,1)"
+                    />
+                  </svg>
+                  <div class="cr-circle-text">
+                    <span class="cr-pct">{{ compressResult.savedPct }}%</span>
+                    <span class="cr-label">lebih kecil</span>
+                  </div>
                 </div>
-              </div>
+                <div class="cr-info">
+                  <h3>PDF berhasil dikompres!</h3>
+                  <p class="cr-sizes">
+                    <span>{{ fmtSize(compressResult.originalSize) }}</span>
+                    <ArrowRight :size="14" class="cr-arrow" />
+                    <span class="cr-new">{{ fmtSize(compressResult.compressedSize) }}</span>
+                  </p>
+                  <p class="cr-saved">Menghemat {{ fmtSize(compressResult.saved) }}</p>
+                  <p v-if="compressResult.imagesCompressed" class="cr-saved" style="color:var(--text-3);font-size:12px">
+                    {{ compressResult.imagesCompressed }} dari {{ compressResult.imagesFound }} gambar dikompres
+                  </p>
+                  <div class="cr-actions">
+                    <button class="btn btn-primary" @click="dl(results[0])">
+                      <Download :size="14" /> Unduh PDF
+                    </button>
+                    <button class="btn btn-outline" @click="compressResult = null; reset(); files = []">
+                      Kompres File Lain
+                    </button>
+                  </div>
+                </div>
+              </template>
             </div>
 
             <template v-else>
               <div class="compress-layout" v-if="files.length">
                 <div class="compress-left">
                   <div class="compress-file-card">
-                    <div class="compress-file-icon">
-                      <File :size="48" :stroke-width="1" />
-                    </div>
+                    <div class="compress-file-icon"><File :size="48" :stroke-width="1" /></div>
                     <div class="compress-file-name">{{ files[0].name }}</div>
                     <div class="compress-file-size">{{ fmtSize(files[0].size) }}</div>
                     <button class="compress-change" @click="files = []">Ganti File</button>
@@ -179,65 +198,114 @@
                 </div>
 
                 <div class="compress-right">
-                  <div class="compress-opts-title">Tingkat Kompresi</div>
-                  <div class="compress-list">
-
-                    <button class="cl-item" :class="{ sel: compressLevel === 'low' }" @click="compressLevel = 'low'">
+                  <!-- Mode unggulan: Smart -->
+                  <div class="cl-smart-wrap">
+                    <div class="cl-smart-label">Direkomendasikan untuk CV &amp; Dokumen Campuran</div>
+                    <button class="cl-item cl-item-smart" :class="{ sel: compressLevel === 'smart' }" @click="compressLevel = 'smart'">
                       <div class="cl-text">
                         <div class="cl-name-row">
-                          <span class="cl-name">AMAN (Lossless)</span>
-                          <span class="cl-badge badge-green">Link Utuh</span>
+                          <span class="cl-name">Cerdas — Kompres Gambar Saja</span>
+                          <span class="cl-badge badge-blue">Teks &amp; Link Utuh</span>
                         </div>
-                        <span class="cl-desc">Hapus metadata · Link, teks, anotasi 100% terjaga</span>
-                        <span class="cl-est">Estimasi: ~5–30% lebih kecil</span>
+                        <span class="cl-desc">
+                          Mencari semua foto/gambar dalam PDF → kompres gambarnya saja → teks, font, dan link <strong>tidak diubah sama sekali</strong>
+                        </span>
+                        <span class="cl-est">~20–60% lebih kecil · Terbaik: CV, surat lamaran, laporan dengan foto</span>
                       </div>
-                      <span class="cl-check" v-if="compressLevel === 'low'">
-                        <Check :size="11" :stroke-width="2.5" />
-                      </span>
-                    </button>
-
-                    <button class="cl-item" :class="{ sel: compressLevel === 'recommended' }" @click="compressLevel = 'recommended'">
-                      <div class="cl-text">
-                        <div class="cl-name-row">
-                          <span class="cl-name">SEDANG (Lossy)</span>
-                          <span class="cl-badge badge-yellow">Link Hilang</span>
-                        </div>
-                        <span class="cl-desc">Render ulang halaman ke JPEG · Cocok untuk PDF scan/foto</span>
-                        <span class="cl-est">Estimasi: ~50–80% lebih kecil</span>
-                      </div>
-                      <span class="cl-check" v-if="compressLevel === 'recommended'">
-                        <Check :size="11" :stroke-width="2.5" />
-                      </span>
-                    </button>
-
-                    <button class="cl-item" :class="{ sel: compressLevel === 'extreme' }" @click="compressLevel = 'extreme'">
-                      <div class="cl-text">
-                        <div class="cl-name-row">
-                          <span class="cl-name">EKSTREM (Lossy)</span>
-                          <span class="cl-badge badge-red">Link Hilang</span>
-                        </div>
-                        <span class="cl-desc">Kualitas gambar sangat rendah · Ukuran sekecil mungkin</span>
-                        <span class="cl-est">Estimasi: ~70–90% lebih kecil</span>
-                      </div>
-                      <span class="cl-check" v-if="compressLevel === 'extreme'">
-                        <Check :size="11" :stroke-width="2.5" />
-                      </span>
+                      <span class="cl-check" v-if="compressLevel === 'smart'"><Check :size="11" :stroke-width="2.5" /></span>
                     </button>
                   </div>
 
-                  <Transition name="fade">
-                    <div class="note note-yellow" v-if="compressLevel !== 'low'" style="margin-top:12px">
-                      <AlertTriangle :size="14" style="flex-shrink:0;margin-top:1px" />
-                      <span>
-                        Level ini merender ulang setiap halaman menjadi gambar JPEG.
-                        <strong>Link, teks yang bisa diseleksi, dan anotasi akan hilang.</strong>
-                        Gunakan level <strong>Aman</strong> jika PDF kamu berisi link atau teks penting.
-                      </span>
+                  <div class="cl-divider">— atau pilih manual —</div>
+
+                  <!-- Kategori 1: Lossless -->
+                  <div class="cl-category">
+                    <div class="cl-cat-label">
+                      <span class="cl-cat-dot" style="background:#22C55E"></span>
+                      Tanpa Kehilangan Kualitas — untuk PDF Teks &amp; Dokumen
                     </div>
-                  </Transition>
+                    <div class="compress-list">
+                      <button class="cl-item" :class="{ sel: compressLevel === 'clean' }" @click="compressLevel = 'clean'">
+                        <div class="cl-text">
+                          <div class="cl-name-row">
+                            <span class="cl-name">Bersih Aman</span>
+                            <span class="cl-badge badge-green">Teks &amp; Link Utuh</span>
+                          </div>
+                          <span class="cl-desc">Hapus metadata, JS, thumbnail tersembunyi</span>
+                          <span class="cl-est">~5–15% lebih kecil</span>
+                        </div>
+                        <span class="cl-check" v-if="compressLevel === 'clean'"><Check :size="11" :stroke-width="2.5" /></span>
+                      </button>
+
+                      <button class="cl-item" :class="{ sel: compressLevel === 'deep_clean' }" @click="compressLevel = 'deep_clean'">
+                        <div class="cl-text">
+                          <div class="cl-name-row">
+                            <span class="cl-name">Bersih Penuh</span>
+                            <span class="cl-badge badge-green">Teks &amp; Link Utuh</span>
+                          </div>
+                          <span class="cl-desc">Hapus metadata + anotasi + bookmark + tag aksesibilitas</span>
+                          <span class="cl-est">~15–40% lebih kecil</span>
+                        </div>
+                        <span class="cl-check" v-if="compressLevel === 'deep_clean'"><Check :size="11" :stroke-width="2.5" /></span>
+                      </button>
+                    </div>
+                    <div class="note note-blue" v-if="['clean','deep_clean'].includes(compressLevel)" style="margin-top:8px">
+                      <Info :size="13" style="flex-shrink:0;margin-top:1px" />
+                      <span style="font-size:12px">Teks, gambar, dan font 100% tidak berubah. Hanya elemen tersembunyi yang dihapus. Pilihan terbaik untuk dokumen teks.</span>
+                    </div>
+                  </div>
+
+                  <!-- Kategori 2: Lossy -->
+                  <div class="cl-category" style="margin-top:14px">
+                    <div class="cl-cat-label">
+                      <span class="cl-cat-dot" style="background:#F59E0B"></span>
+                      Konversi ke Gambar — khusus PDF Scan / Foto
+                    </div>
+                    <div class="compress-list">
+                      <button class="cl-item" :class="{ sel: compressLevel === 'light' }" @click="compressLevel = 'light'">
+                        <div class="cl-text">
+                          <div class="cl-name-row">
+                            <span class="cl-name">Cetak (108 DPI)</span>
+                            <span class="cl-badge badge-yellow">Teks → Gambar</span>
+                          </div>
+                          <span class="cl-desc">JPEG kualitas tinggi · Cocok untuk dokumen yang perlu dicetak</span>
+                          <span class="cl-est">~30–60% lebih kecil</span>
+                        </div>
+                        <span class="cl-check" v-if="compressLevel === 'light'"><Check :size="11" :stroke-width="2.5" /></span>
+                      </button>
+
+                      <button class="cl-item" :class="{ sel: compressLevel === 'standard' }" @click="compressLevel = 'standard'">
+                        <div class="cl-text">
+                          <div class="cl-name-row">
+                            <span class="cl-name">Berbagi (72 DPI)</span>
+                            <span class="cl-badge badge-yellow">Teks → Gambar</span>
+                          </div>
+                          <span class="cl-desc">JPEG standar · Cukup jelas di layar, efisien untuk kirim</span>
+                          <span class="cl-est">~50–75% lebih kecil</span>
+                        </div>
+                        <span class="cl-check" v-if="compressLevel === 'standard'"><Check :size="11" :stroke-width="2.5" /></span>
+                      </button>
+
+                      <button class="cl-item" :class="{ sel: compressLevel === 'max' }" @click="compressLevel = 'max'">
+                        <div class="cl-text">
+                          <div class="cl-name-row">
+                            <span class="cl-name">Maks (50 DPI)</span>
+                            <span class="cl-badge badge-red">Kualitas Rendah</span>
+                          </div>
+                          <span class="cl-desc">Agresif, file sekecil mungkin · Hanya untuk preview</span>
+                          <span class="cl-est">~65–90% lebih kecil</span>
+                        </div>
+                        <span class="cl-check" v-if="compressLevel === 'max'"><Check :size="11" :stroke-width="2.5" /></span>
+                      </button>
+                    </div>
+                    <div class="note note-yellow" v-if="['light','standard','max'].includes(compressLevel)" style="margin-top:8px">
+                      <AlertTriangle :size="13" style="flex-shrink:0;margin-top:1px" />
+                      <span style="font-size:12px"><strong>Teks tidak bisa diseleksi, link hilang.</strong> Gunakan hanya untuk PDF scan, foto, atau brosur.</span>
+                    </div>
+                  </div>
 
                   <ProgressBar :value="progress" :label="progLabel"
-                    :steps="[{pct:10,name:'Membaca'},{pct:50,name:'Optimasi'},{pct:90,name:'Menyimpan'},{pct:100,name:'Selesai'}]" />
+                    :steps="[{pct:10,name:'Membaca'},{pct:50,name:'Kompresi'},{pct:90,name:'Menyimpan'},{pct:100,name:'Selesai'}]" />
                   <div class="error-box" v-if="errMsg">
                     <AlertTriangle :size="15" /> {{ errMsg }}
                   </div>
@@ -250,9 +318,9 @@
                 </div>
               </div>
 
-              <DropZone v-else icon="UploadCloud" file-type="pdf" accept=".pdf"
+              <DropZone v-else icon="Minimize2" file-type="pdf" accept=".pdf"
                 title="Pilih file PDF untuk dikompres"
-                subtitle="Tidak ada batas ukuran — semua diproses di browser kamu"
+                subtitle="Semua diproses di browser — file tidak dikirim ke server"
                 @files="setSingle" />
             </template>
           </template>
@@ -773,33 +841,257 @@
             </div>
           </template>
 
+          <!-- CROP -->
+          <template v-if="tool.id === 'crop'">
+            <DropZone icon="Crop" file-type="pdf" accept=".pdf"
+              title="Pilih file PDF"
+              subtitle="Potong margin dari semua halaman PDF"
+              @files="setSingle" />
+            <FileList :files="files" @remove="removeFile" />
+            <div class="opts-block" v-if="files.length">
+              <span class="opts-label">Margin yang dipotong (mm)</span>
+              <div class="field-row">
+                <div class="field"><label>Atas</label><input type="number" v-model.number="cropTop"    min="0" max="200" /></div>
+                <div class="field"><label>Kanan</label><input type="number" v-model.number="cropRight"  min="0" max="200" /></div>
+                <div class="field"><label>Bawah</label><input type="number" v-model.number="cropBottom" min="0" max="200" /></div>
+                <div class="field"><label>Kiri</label><input type="number" v-model.number="cropLeft"   min="0" max="200" /></div>
+              </div>
+              <span class="opts-label" style="margin-top:14px">Preset Cepat</span>
+              <div class="opts-row">
+                <button class="chip" @click="cropTop=10;cropRight=10;cropBottom=10;cropLeft=10">Hapus 10mm</button>
+                <button class="chip" @click="cropTop=15;cropRight=15;cropBottom=15;cropLeft=15">Hapus 15mm</button>
+                <button class="chip" @click="cropTop=20;cropRight=20;cropBottom=20;cropLeft=20">Hapus 20mm</button>
+                <button class="chip" @click="cropTop=0;cropRight=0;cropBottom=0;cropLeft=0">Reset</button>
+              </div>
+            </div>
+            <div class="action-bar">
+              <span></span>
+              <button class="btn btn-primary" :disabled="!files.length || processing" @click="run">
+                <span v-if="processing" class="spinner" />
+                <Crop v-else :size="15" />
+                {{ processing ? 'Memotong…' : 'Potong PDF' }}
+              </button>
+            </div>
+          </template>
+
+          <!-- REPAIR -->
+          <template v-if="tool.id === 'repair'">
+            <DropZone icon="Wrench" file-type="pdf" accept=".pdf"
+              title="Pilih file PDF yang rusak"
+              subtitle="Sistem akan mencoba memulihkan data dari file PDF yang bermasalah"
+              @files="setSingle" />
+            <FileList :files="files" @remove="removeFile" />
+            <div class="note note-blue" v-if="files.length" style="margin-top:14px">
+              <Info :size="14" style="flex-shrink:0;margin-top:1px" />
+              <span>Proses ini memperbaiki struktur PDF yang rusak ringan hingga sedang. PDF yang sangat rusak atau terenkripsi penuh mungkin tidak dapat dipulihkan sepenuhnya.</span>
+            </div>
+            <div class="action-bar">
+              <span></span>
+              <button class="btn btn-primary" :disabled="!files.length || processing" @click="run">
+                <span v-if="processing" class="spinner" />
+                <Wrench v-else :size="15" />
+                {{ processing ? 'Memperbaiki…' : 'Perbaiki PDF' }}
+              </button>
+            </div>
+          </template>
+
+          <!-- SIGN -->
+          <template v-if="tool.id === 'sign'">
+            <DropZone v-if="!files.length" icon="PenLine" file-type="pdf" accept=".pdf"
+              title="Pilih file PDF"
+              subtitle="Gambar tanda tangan dan sisipkan ke dokumen"
+              @files="setSingle" />
+            <div v-if="files.length" class="sign-layout">
+              <div class="sign-pad-section">
+                <span class="opts-label">Gambar tanda tangan</span>
+                <div class="sign-pad-wrap">
+                  <canvas ref="signCanvasRef" class="sign-canvas" width="380" height="190"
+                    @mousedown="signStartDraw" @mousemove="signDraw" @mouseup="signEndDraw" @mouseleave="signEndDraw"
+                    @touchstart.prevent="signStartDraw" @touchmove.prevent="signDraw" @touchend="signEndDraw"
+                  ></canvas>
+                  <div class="sign-hint" v-if="!signHasDrawing">Gambar tanda tangan di sini</div>
+                </div>
+                <button class="sign-clear-btn" @click="signClear">Hapus &amp; Ulangi</button>
+              </div>
+              <div class="sign-opts-section">
+                <span class="opts-label">Halaman</span>
+                <div class="opts-row">
+                  <button class="chip" :class="{ sel: signPagePos === 'last' }"  @click="signPagePos = 'last'">Terakhir</button>
+                  <button class="chip" :class="{ sel: signPagePos === 'first' }" @click="signPagePos = 'first'">Pertama</button>
+                  <button class="chip" :class="{ sel: signPagePos === 'all' }"   @click="signPagePos = 'all'">Semua</button>
+                </div>
+                <span class="opts-label" style="margin-top:16px">Posisi</span>
+                <div class="opts-row">
+                  <button class="chip" :class="{ sel: signPosition === 'bottom-right' }"  @click="signPosition = 'bottom-right'">Kanan Bawah</button>
+                  <button class="chip" :class="{ sel: signPosition === 'bottom-left' }"   @click="signPosition = 'bottom-left'">Kiri Bawah</button>
+                  <button class="chip" :class="{ sel: signPosition === 'bottom-center' }" @click="signPosition = 'bottom-center'">Tengah Bawah</button>
+                </div>
+                <span class="opts-label" style="margin-top:16px">Ukuran</span>
+                <div class="opts-row">
+                  <button class="chip" :class="{ sel: signWidth === 100 }" @click="signWidth = 100">Kecil</button>
+                  <button class="chip" :class="{ sel: signWidth === 150 }" @click="signWidth = 150">Sedang</button>
+                  <button class="chip" :class="{ sel: signWidth === 220 }" @click="signWidth = 220">Besar</button>
+                </div>
+              </div>
+            </div>
+            <div class="action-bar" v-if="files.length">
+              <button class="btn btn-outline" @click="files = []; signClear()">
+                <ChevronLeft :size="14" /> Ganti File
+              </button>
+              <button class="btn btn-primary" :disabled="!signHasDrawing || processing" @click="run">
+                <span v-if="processing" class="spinner" />
+                <PenLine v-else :size="15" />
+                {{ processing ? 'Menambahkan…' : 'Tambahkan Tanda Tangan' }}
+              </button>
+            </div>
+          </template>
+
+          <!-- REDACT -->
+          <template v-if="tool.id === 'redact'">
+            <DropZone v-if="!files.length" icon="Eraser" file-type="pdf" accept=".pdf"
+              title="Pilih file PDF"
+              subtitle="Gambar kotak hitam untuk menyamarkan area sensitif secara permanen"
+              @files="loadPageThumbsFor('redact', $event)" />
+
+            <!-- Edit halaman aktif -->
+            <div v-if="files.length && rdEditingPage !== null" class="rd-edit-wrap">
+              <div class="rd-edit-header">
+                <button class="btn btn-outline" style="padding:7px 14px;font-size:13px" @click="rdDoneEditing">
+                  <ChevronLeft :size="13" /> Kembali
+                </button>
+                <span class="rd-edit-title">Halaman {{ rdEditingPage + 1 }}</span>
+                <span class="rd-edit-hint">Seret untuk membuat kotak redaksi</span>
+              </div>
+              <div class="rd-canvas-wrap">
+                <canvas ref="rdCanvasRef" class="rd-draw-canvas"
+                  @mousedown="rdStartRect" @mousemove="rdMoveRect"
+                  @mouseup="rdEndRect" @mouseleave="rdEndRect"
+                ></canvas>
+              </div>
+              <div class="action-bar">
+                <button class="btn btn-outline" @click="rdCurrentRects = []; rdRedrawCanvas()">Hapus Semua Kotak</button>
+                <button class="btn btn-primary" @click="rdDoneEditing">
+                  <Check :size="14" /> Selesai Edit Halaman
+                </button>
+              </div>
+            </div>
+
+            <!-- Grid halaman -->
+            <template v-if="files.length && rdEditingPage === null && !results.length">
+              <div class="pp-info-bar">
+                <span class="opts-label" style="margin:0">Klik "Edit" pada halaman untuk menambah area redaksi</span>
+                <span class="pp-count-badge"
+                  v-if="Object.keys(rdRedactions).filter(k => rdRedactions[k]?.length).length">
+                  {{ Object.keys(rdRedactions).filter(k => rdRedactions[k]?.length).length }} halaman ditandai
+                </span>
+              </div>
+              <div v-if="rdThumbsLoading" class="pp-loading">Memuat pratinjau halaman…</div>
+              <div v-else class="pp-grid">
+                <div v-for="pg in rdThumbs" :key="pg.index"
+                  class="pp-item rd-pp-item"
+                  :class="{ 'rd-has-redact': rdRedactions[pg.index]?.length }">
+                  <img v-if="pg.thumb" :src="pg.thumb" class="pp-thumb" alt="" />
+                  <div v-else class="pp-thumb-ph"><File :size="28" :stroke-width="1" /></div>
+                  <div class="rd-badge" v-if="rdRedactions[pg.index]?.length">
+                    {{ rdRedactions[pg.index].length }}
+                  </div>
+                  <div class="pp-num">{{ pg.index + 1 }}</div>
+                  <button class="rd-edit-btn" @click="rdOpenPage(pg)">Edit</button>
+                </div>
+              </div>
+              <div class="action-bar">
+                <button class="btn btn-outline" @click="files = []; rdThumbs = []; rdRedactions = {}; reset()">Ganti File</button>
+                <button class="btn btn-primary"
+                  :disabled="!Object.keys(rdRedactions).filter(k => rdRedactions[k]?.length).length || processing"
+                  @click="run">
+                  <span v-if="processing" class="spinner" />
+                  <Eraser v-else :size="15" />
+                  {{ processing ? 'Menyamarkan…' : 'Samarkan PDF' }}
+                </button>
+              </div>
+            </template>
+          </template>
+
+          <!-- HTML TO PDF -->
+          <template v-if="tool.id === 'html2pdf'">
+            <div v-if="htmlPreview" class="print-result">
+              <div class="print-info">
+                <span class="print-check"><Check :size="13" :stroke-width="2.5" /></span>
+                <div>
+                  <strong>HTML siap dikonversi ke PDF!</strong>
+                  <p>Klik tombol di bawah → pilih <strong>Simpan sebagai PDF</strong> di dialog cetak</p>
+                </div>
+              </div>
+              <div class="print-preview-wrap">
+                <iframe class="print-preview-iframe" :srcdoc="htmlPreview.html" sandbox="allow-same-origin"></iframe>
+              </div>
+              <div class="print-steps">
+                <span class="step"><span class="step-n">1</span> Klik Cetak</span>
+                <span class="step-arr"><ArrowRight :size="12" /></span>
+                <span class="step"><span class="step-n">2</span> Pilih "Simpan sebagai PDF"</span>
+                <span class="step-arr"><ArrowRight :size="12" /></span>
+                <span class="step"><span class="step-n">3</span> Klik Simpan</span>
+              </div>
+              <div class="action-bar">
+                <button class="btn btn-outline" @click="htmlPreview = null; htmlInputText = ''">
+                  <ChevronLeft :size="14" /> Edit Ulang
+                </button>
+                <button class="btn btn-primary" @click="printHtml(htmlPreview.html)">
+                  <Printer :size="15" /> Cetak / Simpan sebagai PDF
+                </button>
+              </div>
+            </div>
+            <template v-else>
+              <div class="opts-block">
+                <span class="opts-label">Tempel kode HTML</span>
+                <textarea v-model="htmlInputText" class="html-textarea"
+                  placeholder="Tempel kode HTML di sini… Bisa dokumen lengkap atau fragmen seperti &lt;h1&gt;, &lt;p&gt;, &lt;table&gt;, dll."
+                ></textarea>
+              </div>
+              <div class="note note-blue" style="margin-top:12px">
+                <Info :size="14" style="flex-shrink:0;margin-top:1px" />
+                <span>Tempel kode HTML lengkap atau fragmen. Hasil akan dirender dan siap dicetak sebagai PDF lewat dialog cetak browser.</span>
+              </div>
+              <div class="action-bar">
+                <span></span>
+                <button class="btn btn-primary" :disabled="!htmlInputText.trim()" @click="run">
+                  <Code2 :size="15" /> Konversi ke PDF
+                </button>
+              </div>
+            </template>
+          </template>
+
           <!-- SHARED: Progress + Error + Result -->
           <template v-if="tool.id !== 'compress' || !compressResult">
             <ProgressBar v-if="!htmlPreview" :value="progress" :label="progLabel" :steps="progressSteps" />
-            <Transition name="fade">
+            <Transition name="err-fade">
               <div class="error-box" v-if="errMsg && tool.id !== 'compress'">
                 <AlertTriangle :size="15" /> {{ errMsg }}
               </div>
             </Transition>
-            <ResultBox :results="results" v-if="!['compress','word2pdf','excel2pdf'].includes(tool.id)" />
+            <ResultBox :results="results" v-if="!['compress','word2pdf','excel2pdf','html2pdf'].includes(tool.id)" />
           </template>
 
+          </div>
         </div>
-      </template>
-    </div>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, inject } from 'vue'
+import { ref, computed, inject, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
+// Jangan impor ikon `Image` di sini: binding-nya akan menutupi window.Image
+// global, sehingga `new Image()` di bawah melempar "Image is not a constructor".
 import {
   ChevronLeft, GripVertical, X, File, Plus, GitMerge,
   Scissors, Minimize2, RotateCw, ListOrdered, Hash,
-  Image, Camera, FileText, BarChart2, FileOutput, FileSpreadsheet,
+  Camera, FileText, BarChart2, FileOutput, FileSpreadsheet,
   ArrowRight, Check, AlertTriangle, Info, Download, Printer,
   Lock, Unlock, Eye, EyeOff, FileMinus, Copy, Layers,
   RefreshCw, AlignLeft, List,
+  Crop, Wrench, PenLine, Eraser, Code2,
 } from '@lucide/vue'
 import AppIcon     from '../components/AppIcon.vue'
 import DropZone    from '../components/DropZone.vue'
@@ -807,8 +1099,8 @@ import FileList    from '../components/FileList.vue'
 import ProgressBar from '../components/ProgressBar.vue'
 import ResultBox   from '../components/ResultBox.vue'
 
-import { useTool }         from '../composables/useTools.js'
-import { usePdfProcessor } from '../composables/usePdfProcessor.js'
+import { useTool }                    from '../composables/useTools.js'
+import { usePdfProcessor, loadPDFjs } from '../composables/usePdfProcessor.js'
 
 const route     = useRoute()
 const showToast = inject('showToast', () => {})
@@ -822,6 +1114,7 @@ const {
   doWord2PDF, doExcel2PDF, doPDF2Docx, doPDF2Xlsx,
   doRemovePages, doExtractPages, doWatermark,
   doImgConvert, doExcel2Csv, doWord2Txt,
+  doCropPDF, doRepairPDF, doSignPDF, doRedactPDF,
 } = usePdfProcessor()
 
 const files    = ref([])
@@ -833,16 +1126,7 @@ const mgFrom          = ref(-1)
 
 async function generatePdfThumbnail(file) {
   try {
-    if (!window._pdfjsReady) {
-      await new Promise((res, rej) => {
-        const s = document.createElement('script')
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-        s.onload = res; s.onerror = rej; document.head.appendChild(s)
-      })
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-      window._pdfjsReady = true
-    }
+    await loadPDFjs()
     const ab  = await new Promise((res, rej) => {
       const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsArrayBuffer(file)
     })
@@ -950,7 +1234,7 @@ const imgPageSz      = ref('A4')
 const imgScale       = ref(2)
 const pageNumPos     = ref('bottom-center')
 const pdfPass        = ref('')
-const compressLevel  = ref('low')
+const compressLevel  = ref('smart')
 const compressResult = ref(null)
 const htmlPreview    = ref(null)
 
@@ -977,6 +1261,163 @@ const wmColor    = ref('gray')
 // Password visibility (protect / unlock)
 const showPass = ref(false)
 
+// Crop
+const cropTop    = ref(0)
+const cropRight  = ref(0)
+const cropBottom = ref(0)
+const cropLeft   = ref(0)
+
+// Sign
+const signCanvasRef  = ref(null)
+const signIsDrawing  = ref(false)
+const signLastX      = ref(0)
+const signLastY      = ref(0)
+const signHasDrawing = ref(false)
+const signPagePos    = ref('last')
+const signPosition   = ref('bottom-right')
+const signWidth      = ref(150)
+
+function signStartDraw(e) {
+  signIsDrawing.value = true
+  const canvas = signCanvasRef.value
+  const rect   = canvas.getBoundingClientRect()
+  const cx = e.touches ? e.touches[0].clientX : e.clientX
+  const cy = e.touches ? e.touches[0].clientY : e.clientY
+  signLastX.value = (cx - rect.left) * (canvas.width / rect.width)
+  signLastY.value = (cy - rect.top)  * (canvas.height / rect.height)
+}
+function signDraw(e) {
+  if (!signIsDrawing.value) return
+  const canvas = signCanvasRef.value
+  const rect   = canvas.getBoundingClientRect()
+  const cx = e.touches ? e.touches[0].clientX : e.clientX
+  const cy = e.touches ? e.touches[0].clientY : e.clientY
+  const x  = (cx - rect.left) * (canvas.width  / rect.width)
+  const y  = (cy - rect.top)  * (canvas.height / rect.height)
+  const ctx = canvas.getContext('2d')
+  ctx.beginPath(); ctx.moveTo(signLastX.value, signLastY.value); ctx.lineTo(x, y)
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+  ctx.stroke()
+  signLastX.value = x; signLastY.value = y; signHasDrawing.value = true
+}
+function signEndDraw() { signIsDrawing.value = false }
+function signClear() {
+  const canvas = signCanvasRef.value
+  if (!canvas) return
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height)
+  signHasDrawing.value = false
+}
+
+// Redact
+const rdThumbs        = ref([])
+const rdThumbsLoading = ref(false)
+const rdRedactions    = ref({})   // { pageIndex: [{relX,relY,relW,relH,x,y,w,h}] }
+const rdEditingPage   = ref(null)
+const rdCanvasRef     = ref(null)
+const rdBaseImage     = ref(null)
+const rdIsDrawing     = ref(false)
+const rdStartX        = ref(0)
+const rdStartY        = ref(0)
+const rdCurrentRects  = ref([])
+const rdCurrentDraw   = ref(null)
+
+function rdGetXY(e) {
+  const canvas = rdCanvasRef.value
+  const rect   = canvas.getBoundingClientRect()
+  return {
+    x: (e.clientX - rect.left) * (canvas.width  / rect.width),
+    y: (e.clientY - rect.top)  * (canvas.height / rect.height),
+  }
+}
+function rdStartRect(e) {
+  rdIsDrawing.value = true
+  const { x, y } = rdGetXY(e)
+  rdStartX.value = x; rdStartY.value = y
+}
+function rdMoveRect(e) {
+  if (!rdIsDrawing.value) return
+  const { x, y } = rdGetXY(e)
+  const rx = Math.min(rdStartX.value, x), ry = Math.min(rdStartY.value, y)
+  const rw = Math.abs(x - rdStartX.value), rh = Math.abs(y - rdStartY.value)
+  rdCurrentDraw.value = { x: rx, y: ry, w: rw, h: rh }
+  rdRedrawCanvas()
+}
+function rdEndRect(e) {
+  if (!rdIsDrawing.value) return
+  rdIsDrawing.value = false
+  const d = rdCurrentDraw.value
+  if (d && d.w > 5 && d.h > 5) {
+    const canvas = rdCanvasRef.value
+    rdCurrentRects.value = [...rdCurrentRects.value, {
+      x: d.x, y: d.y, w: d.w, h: d.h,
+      relX: d.x / canvas.width, relY: d.y / canvas.height,
+      relW: d.w / canvas.width, relH: d.h / canvas.height,
+    }]
+  }
+  rdCurrentDraw.value = null
+  rdRedrawCanvas()
+}
+function rdRedrawCanvas() {
+  const canvas = rdCanvasRef.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (rdBaseImage.value) ctx.drawImage(rdBaseImage.value, 0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = 'rgba(0,0,0,0.88)'
+  for (const r of rdCurrentRects.value) ctx.fillRect(r.x, r.y, r.w, r.h)
+  if (rdCurrentDraw.value) {
+    const d = rdCurrentDraw.value
+    ctx.fillStyle = 'rgba(220,38,38,0.35)'
+    ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 2
+    ctx.fillRect(d.x, d.y, d.w, d.h); ctx.strokeRect(d.x, d.y, d.w, d.h)
+  }
+}
+async function rdOpenPage(pg) {
+  rdEditingPage.value = pg.index
+  rdCurrentRects.value = rdRedactions.value[pg.index]
+    ? rdRedactions.value[pg.index].map(r => ({ ...r })) : []
+  rdBaseImage.value = null; rdCurrentDraw.value = null
+  try {
+    await loadPDFjs()
+    const ab  = await new Promise((res, rej) => {
+      const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsArrayBuffer(files.value[0])
+    })
+    const pdf  = await pdfjsLib.getDocument({ data: new Uint8Array(ab) }).promise
+    const page = await pdf.getPage(pg.index + 1)
+    const vp   = page.getViewport({ scale: 1.5 })
+    const cv   = document.createElement('canvas')
+    cv.width   = Math.round(vp.width); cv.height = Math.round(vp.height)
+    const ctx  = cv.getContext('2d')
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height)
+    await page.render({ canvasContext: ctx, viewport: vp }).promise
+    await nextTick()
+    const canvasEl = rdCanvasRef.value
+    if (canvasEl) {
+      canvasEl.width = cv.width; canvasEl.height = cv.height
+      const img = new Image()
+      img.src = cv.toDataURL('image/jpeg', 0.9)
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej })
+      rdBaseImage.value = img
+      rdRedrawCanvas()
+    }
+  } catch (e) {
+    rdEditingPage.value = null
+    errMsg.value = 'Gagal membuka halaman: ' + e.message
+  }
+}
+function rdDoneEditing() {
+  if (rdCurrentRects.value.length) {
+    rdRedactions.value = { ...rdRedactions.value, [rdEditingPage.value]: rdCurrentRects.value }
+  } else {
+    const copy = { ...rdRedactions.value }
+    delete copy[rdEditingPage.value]
+    rdRedactions.value = copy
+  }
+  rdEditingPage.value = null; rdCurrentRects.value = []; rdBaseImage.value = null; rdCurrentDraw.value = null
+}
+
+// HTML ke PDF
+const htmlInputText = ref('')
+
 function toggleRpDelete(idx) {
   if (rpToDelete.value.includes(idx)) rpToDelete.value = rpToDelete.value.filter((i) => i !== idx)
   else rpToDelete.value = [...rpToDelete.value, idx]
@@ -988,19 +1429,11 @@ function toggleEpSelect(idx) {
 
 async function loadPageThumbsFor(mode, newFs) {
   files.value = [newFs[0]]; errMsg.value = ''
-  if (mode === 'remove') { rpThumbs.value = []; rpToDelete.value = []; rpThumbsLoading.value = true }
-  else                   { epThumbs.value = []; epSelected.value  = []; epThumbsLoading.value = true }
+  if (mode === 'remove')      { rpThumbs.value = []; rpToDelete.value = []; rpThumbsLoading.value = true }
+  else if (mode === 'redact') { rdThumbs.value = []; rdRedactions.value = {}; rdThumbsLoading.value = true }
+  else                        { epThumbs.value = []; epSelected.value  = []; epThumbsLoading.value = true }
   try {
-    if (!window._pdfjsReady) {
-      await new Promise((res, rej) => {
-        const s = document.createElement('script')
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-        s.onload = res; s.onerror = rej; document.head.appendChild(s)
-      })
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-      window._pdfjsReady = true
-    }
+    await loadPDFjs()
     const ab  = await new Promise((res, rej) => {
       const r = new FileReader(); r.onload = (e) => res(e.target.result); r.onerror = rej; r.readAsArrayBuffer(newFs[0])
     })
@@ -1016,12 +1449,14 @@ async function loadPageThumbsFor(mode, newFs) {
       await pg.render({ canvasContext: ctx, viewport: vp }).promise
       thumbs.push({ index: i - 1, thumb: cv.toDataURL('image/jpeg', 0.75) })
     }
-    if (mode === 'remove') rpThumbs.value = thumbs
-    else                   epThumbs.value = thumbs
+    if (mode === 'remove')      rpThumbs.value = thumbs
+    else if (mode === 'redact') rdThumbs.value = thumbs
+    else                        epThumbs.value = thumbs
   } catch (e) { errMsg.value = 'Gagal memuat pratinjau: ' + e.message }
   finally {
-    if (mode === 'remove') rpThumbsLoading.value = false
-    else                   epThumbsLoading.value = false
+    if (mode === 'remove')      rpThumbsLoading.value = false
+    else if (mode === 'redact') rdThumbsLoading.value = false
+    else                        epThumbsLoading.value = false
   }
 }
 
@@ -1033,16 +1468,7 @@ function poOver(i) {
 async function loadForReorder(newFs) {
   files.value = [newFs[0]]
   try {
-    if (!window._pdfjsReady) {
-      await new Promise((res, rej) => {
-        const s = document.createElement('script')
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-        s.onload = res; s.onerror = rej; document.head.appendChild(s)
-      })
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-      window._pdfjsReady = true
-    }
+    await loadPDFjs()
     const ab  = await new Promise((res, rej) => {
       const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsArrayBuffer(newFs[0])
     })
@@ -1075,6 +1501,10 @@ const progressSteps = computed(() => {
     img2webp:    [{ pct:5, name:'Memuat'     }, { pct:60,name:'Mengkonversi'}, { pct:95,name:'Menyimpan'   },{pct:100,name:'Selesai'}],
     excel2csv:   [{ pct:20,name:'Memuat'     }, { pct:60,name:'Mengkonversi'}, { pct:88,name:'Menyimpan'   },{pct:100,name:'Selesai'}],
     word2txt:    [{ pct:20,name:'Memuat'     }, { pct:65,name:'Mengekstrak' }, { pct:90,name:'Menyimpan'   },{pct:100,name:'Selesai'}],
+    crop:        [{ pct:20,name:'Membaca'   }, { pct:70,name:'Memotong'    }, { pct:90,name:'Menyimpan'   },{pct:100,name:'Selesai'}],
+    repair:      [{ pct:30,name:'Membaca'   }, { pct:65,name:'Memulihkan'  }, { pct:88,name:'Menyimpan'   },{pct:100,name:'Selesai'}],
+    sign:        [{ pct:20,name:'Membaca'   }, { pct:50,name:'Memuat Tanda'}, { pct:80,name:'Menambah'    },{pct:100,name:'Selesai'}],
+    redact:      [{ pct:5, name:'Memuat'    }, { pct:30,name:'Merender'    }, { pct:80,name:'Menyamarkan' },{pct:100,name:'Selesai'}],
   }
   return map[tool.value?.id] || map.merge
 })
@@ -1110,6 +1540,20 @@ async function run() {
   }
   if (id === 'excel2csv') await doExcel2Csv(files.value[0])
   if (id === 'word2txt')  await doWord2Txt(files.value[0])
+  if (id === 'crop')   await doCropPDF(files.value[0], { top: cropTop.value, right: cropRight.value, bottom: cropBottom.value, left: cropLeft.value })
+  if (id === 'repair') await doRepairPDF(files.value[0])
+  if (id === 'sign' && signCanvasRef.value) {
+    await doSignPDF(files.value[0], signCanvasRef.value.toDataURL('image/png'), signPagePos.value, signPosition.value, signWidth.value)
+  }
+  if (id === 'redact') await doRedactPDF(files.value[0], rdRedactions.value)
+  if (id === 'html2pdf') {
+    const trimmed = htmlInputText.value.trim()
+    if (!trimmed) return
+    const isFullDoc = /^\s*<!doctype|^\s*<html/i.test(trimmed)
+    const html = isFullDoc ? trimmed
+      : `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>HTML ke PDF</title><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#000;margin:0;padding:20mm}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:4px 8px}@media print{body{padding:15mm}}</style></head><body>${trimmed}</body></html>`
+    htmlPreview.value = { html, name: 'converted.pdf' }
+  }
 }
 
 function printHtml(html) {
@@ -1122,57 +1566,77 @@ function printHtml(html) {
 
 function dl(r) { const a = document.createElement('a'); a.href = r.url; a.download = r.name; a.click() }
 
-watch(() => route.params.id, () => {
-  files.value = []; previews.value = []; pageOrder.value = []
-  pdfPass.value = ''; compressResult.value = null; htmlPreview.value = null
-  compressLevel.value = 'low'
-  mergePreviews.value = []; mergePageCounts.value = []; mgFrom.value = -1
-  rpThumbs.value = []; rpToDelete.value = []; rpThumbsLoading.value = false
-  epThumbs.value = []; epSelected.value = []; epThumbsLoading.value = false
-  wmText.value = 'RAHASIA'; wmFontSize.value = 48; wmOpacity.value = 0.15; wmAngle.value = -45; wmColor.value = 'gray'
-  showPass.value = false
-  reset()
-})
+// Tidak perlu watcher untuk mereset state saat pindah tool: App.vue memberi
+// :key="route.path" pada komponen rute, jadi ToolView remount dan seluruh ref
+// kembali ke nilai awal. Lepas blob URL milik hasil sebelumnya.
+onBeforeUnmount(reset)
 </script>
 
 <style scoped>
-.tool-view { padding: 40px 0 80px; }
-.tv-inner  { max-width: 780px; margin: 0 auto; padding: 0 24px; }
+/* ── Tool page layout ───────────────────────────────────────── */
+.tool-page { --tool-clr: #09090B; min-height: 100vh; }
 
-.tv-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+/* Tool Hero */
+.tool-hero {
+  background: #fff;
+  border-bottom: 1px solid rgba(0,0,0,.07);
+  padding: 28px 0 36px;
 }
-.back-btn {
+.tool-hero-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+.th-back {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-2);
+  color: var(--text-3);
   text-decoration: none;
-  padding: 4px 0;
+  margin-bottom: 20px;
   transition: color .15s;
 }
-.back-btn:hover { color: var(--text); }
-.sep       { color: var(--c-300); font-size: 14px; }
-.tv-icon   {
-  width: 28px; height: 28px;
-  border-radius: 6px;
-  background: var(--c-100);
-  color: var(--c-700);
+.th-back:hover { color: var(--text); }
+.th-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+.th-icon {
+  width: 72px; height: 72px;
+  border-radius: 20px;
+  background: var(--tool-clr);
+  color: #fff;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--tool-clr) 40%, transparent);
 }
-h1 { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
+.th-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -.4px;
+  color: var(--c-950);
+  line-height: 1.15;
+}
+.th-desc {
+  font-size: 14px;
+  color: var(--text-2);
+  max-width: 440px;
+  line-height: 1.6;
+}
+
+/* Tool Workspace */
+.tool-workspace { padding: 36px 0 80px; }
+.workspace-inner { max-width: 800px; margin: 0 auto; padding: 0 24px; }
 
 .workspace-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.04);
   padding: 28px;
   position: relative;
 }
@@ -1215,8 +1679,8 @@ h1 { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
 
 /* Buttons */
 .btn         { display: inline-flex; align-items: center; gap: 7px; padding: 10px 20px; border-radius: var(--radius-sm); font-family: var(--font); font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all .2s ease; line-height: 1; }
-.btn-primary { background: var(--c-950); color: var(--c-white); }
-.btn-primary:hover    { background: var(--c-800); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.btn-primary { background: var(--tool-clr, var(--c-950)); color: #fff; }
+.btn-primary:hover    { opacity: .88; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,.2); }
 .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
 .btn-outline { background: var(--surface); color: var(--text); border: 1.5px solid var(--border); }
 .btn-outline:hover { border-color: var(--border-2); background: var(--bg); }
@@ -1240,7 +1704,7 @@ h1 { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
 .file-rm   { background: none; border: none; color: var(--c-400); cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; flex-shrink: 0; transition: color .15s, background .15s; }
 .file-rm:hover { color: var(--c-950); background: var(--c-100); }
 
-.not-found { text-align: center; padding: 40px; color: var(--text-2); }
+.not-found-page { text-align: center; padding: 80px 24px; color: var(--text-2); }
 
 /* Compress layout */
 .compress-layout { display: grid; grid-template-columns: 1fr 1.6fr; min-height: 420px; }
@@ -1275,6 +1739,51 @@ h1 { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
 
 .cl-btn { width: 100%; justify-content: center; margin-top: 14px; padding: 12px; font-size: 14px; }
 
+.cl-smart-wrap {
+  margin-bottom: 4px;
+}
+.cl-smart-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: #6366F1;
+  margin-bottom: 7px;
+}
+.cl-item-smart {
+  border-color: #6366F1 !important;
+  background: #f5f3ff !important;
+}
+.cl-item-smart.sel {
+  background: #ede9fe !important;
+}
+.badge-blue { background: #ede9fe; color: #4338ca; }
+.cl-divider {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+  margin: 14px 0 10px;
+  position: relative;
+}
+
+.cl-category { }
+.cl-cat-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.cl-cat-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* Compress result */
 .compress-result { display: flex; align-items: center; gap: 40px; padding: 32px; animation: fadeUp .5s cubic-bezier(.16,1,.3,1); }
 .cr-circle-wrap  { position: relative; flex-shrink: 0; }
@@ -1282,6 +1791,7 @@ h1 { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
 .cr-circle-text  { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
 .cr-pct          { font-size: 28px; font-weight: 800; color: var(--c-950); line-height: 1; font-variant-numeric: tabular-nums; }
 .cr-label        { font-size: 11px; color: var(--text-3); font-weight: 500; }
+.cr-info-full    { flex: 1; }
 .cr-info h3      { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
 .cr-sizes        { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
 .cr-arrow        { color: var(--c-400); flex-shrink: 0; }
@@ -1345,22 +1855,31 @@ h1 { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
 .mg-grid-over { outline: 2px dashed var(--c-300); outline-offset: 4px; border-radius: var(--radius); }
 
 /* Animations */
-.fade-enter-active, .fade-leave-active { transition: all .25s ease; }
-.fade-enter-from, .fade-leave-to       { opacity: 0; transform: translateY(4px); }
+/* Sengaja bukan "fade": CSS scoped komponen anak juga berlaku di elemen root-nya,
+   jadi nama "fade" akan tertimpa/menimpa transisi halaman milik App.vue. */
+.err-fade-enter-active, .err-fade-leave-active { transition: all .25s ease; }
+.err-fade-enter-from, .err-fade-leave-to       { opacity: 0; transform: translateY(4px); }
 .list-enter-active, .list-leave-active { transition: all .2s ease; }
 .list-enter-from, .list-leave-to       { opacity: 0; transform: translateX(-8px); }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pop    { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
+@media (max-width: 768px) {
+  .tool-hero { padding: 20px 0 28px; }
+  .tool-hero-inner { padding: 0 20px; }
+  .th-title { font-size: 22px; }
+  .th-icon  { width: 60px; height: 60px; border-radius: 16px; }
+  .th-icon :deep(svg) { width: 28px; height: 28px; }
+  .workspace-inner { padding: 0 16px; }
+  .tool-workspace { padding: 24px 0 60px; }
+}
 @media (max-width: 640px) {
-  .tool-view { padding: 20px 0 60px; }
-  .tv-inner  { padding: 0 16px; }
-  .workspace-card { padding: 20px 16px; }
+  .workspace-card { padding: 20px 16px; border-radius: 16px; }
   .action-bar { flex-direction: column; align-items: stretch; }
   .btn { width: 100%; justify-content: center; }
   .compress-layout { grid-template-columns: 1fr; }
-  .compress-left { border-right: none; border-bottom: 1px solid var(--border); padding: 20px; border-radius: var(--radius) var(--radius) 0 0; }
+  .compress-left { border-right: none; border-bottom: 1px solid var(--border); padding: 20px; border-radius: 16px 16px 0 0; }
   .compress-right { padding: 20px 16px; }
   .compress-result { flex-direction: column; gap: 24px; padding: 24px 16px; text-align: center; }
   .cr-sizes  { justify-content: center; }
@@ -1515,4 +2034,47 @@ h1 { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
 @media (max-width: 640px) {
   .pp-grid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ── Sign PDF ──────────────────────────────────────────────── */
+.sign-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+.sign-pad-section, .sign-opts-section { display: flex; flex-direction: column; gap: 10px; }
+.sign-pad-wrap { position: relative; border: 1.5px dashed var(--border); border-radius: var(--radius-sm); background: #f9f9f9; overflow: hidden; }
+.sign-canvas { display: block; width: 100%; cursor: crosshair; touch-action: none; user-select: none; }
+.sign-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--c-300); pointer-events: none; }
+.sign-clear-btn { align-self: flex-start; padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--text-2); background: var(--surface); cursor: pointer; font-family: var(--font); transition: all .15s; }
+.sign-clear-btn:hover { border-color: var(--c-400); color: var(--text); }
+@media (max-width: 640px) {
+  .sign-layout { grid-template-columns: 1fr; }
+}
+
+/* ── Redact PDF ─────────────────────────────────────────────── */
+.rd-edit-wrap { display: flex; flex-direction: column; gap: 16px; }
+.rd-edit-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rd-edit-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.rd-edit-hint  { font-size: 12px; color: var(--text-3); }
+.rd-canvas-wrap { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: auto; background: var(--bg); max-height: 62vh; display: flex; justify-content: center; align-items: flex-start; }
+.rd-draw-canvas { cursor: crosshair; display: block; max-width: 100%; touch-action: none; user-select: none; }
+.rd-pp-item { cursor: default; }
+.rd-edit-btn { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 3px 9px; border: none; border-radius: 4px; font-size: 10px; font-weight: 700; background: var(--c-950); color: var(--c-white); cursor: pointer; font-family: var(--font); letter-spacing: .3px; }
+.rd-edit-btn:hover { background: var(--c-700); }
+.rd-has-redact { border-color: #f97316 !important; }
+.rd-badge { position: absolute; top: 5px; right: 5px; background: #f97316; color: #fff; font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 3px; pointer-events: none; }
+
+/* ── HTML ke PDF ────────────────────────────────────────────── */
+.html-textarea {
+  width: 100%;
+  height: 240px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--surface);
+  outline: none;
+  resize: vertical;
+  transition: border-color .15s;
+}
+.html-textarea:focus { border-color: var(--c-500); }
 </style>

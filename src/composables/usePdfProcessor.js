@@ -1,7 +1,7 @@
 import { ref } from 'vue'
-import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib'
+import { PDFDocument, rgb, StandardFonts, degrees, PDFRawStream, PDFName } from 'pdf-lib'
 
-async function loadPDFjs() {
+export async function loadPDFjs() {
   if (window._pdfjsReady) return
   await new Promise((res, rej) => {
     const s = document.createElement('script')
@@ -63,6 +63,43 @@ function escHtml(s) {
     .replace(/"/g, '&quot;')
 }
 
+// Cluster a list of numeric values into groups based on proximity tolerance
+function clusterValues(values, tolerance) {
+  const sorted = [...values].sort((a, b) => a - b)
+  const clusters = []
+  for (const v of sorted) {
+    const last = clusters[clusters.length - 1]
+    if (!last || v - last.max > tolerance) {
+      clusters.push({ max: v, sum: v, count: 1 })
+    } else {
+      last.max = v; last.sum += v; last.count++
+    }
+  }
+  return clusters.map(c => c.sum / c.count)
+}
+
+// Group items by Y position (descending = top-to-bottom in PDF)
+function groupByRow(items, tolerance) {
+  const sorted = [...items].sort((a, b) => b.y - a.y)
+  const groups = []
+  for (const item of sorted) {
+    const last = groups[groups.length - 1]
+    if (!last || Math.abs(item.y - last[0].y) > tolerance) groups.push([item])
+    else last.push(item)
+  }
+  return groups
+}
+
+// Find index of nearest center
+function nearestIdx(centers, val) {
+  let best = 0, bestD = Infinity
+  for (let i = 0; i < centers.length; i++) {
+    const d = Math.abs(centers[i] - val)
+    if (d < bestD) { bestD = d; best = i }
+  }
+  return best
+}
+
 export function usePdfProcessor() {
   const processing = ref(false)
   const progress   = ref(0)
@@ -90,6 +127,8 @@ export function usePdfProcessor() {
     processing.value = false
     progress.value   = 0
     progLabel.value  = ''
+    // Blob URL tetap menahan memori file sampai di-revoke secara eksplisit.
+    results.value.forEach((r) => r.url && URL.revokeObjectURL(r.url))
     results.value    = []
     errMsg.value     = ''
   }
@@ -283,49 +322,169 @@ export function usePdfProcessor() {
     finally { processing.value = false }
   }
 
-  async function doCompress(file, level = 'recommended') {
+  async function doCompress(file, level = 'standard') {
     processing.value = true; errMsg.value = ''; results.value = []
     const originalSize = file instanceof File ? file.size : (file?.size ?? 0)
     try {
       setProgress(8, 'Membaca file…')
       const ab = await readAB(file)
 
-      if (level === 'low') {
-        setProgress(35, 'Mengoptimasi struktur PDF…')
-        const doc = await PDFDocument.load(ab, { updateMetadata: false })
-        try { doc.catalog.delete(doc.context.obj('Metadata')) } catch {}
-        setProgress(80, 'Menyimpan…')
+      // ── Lossless modes ────────────────────────────────────────
+      if (level === 'clean' || level === 'deep_clean') {
+        setProgress(25, 'Memuat struktur PDF…')
+        const doc = await PDFDocument.load(ab, { updateMetadata: false, ignoreEncryption: true })
+        const ctx = doc.context
+
+        // Selalu hapus (tidak terlihat oleh pengguna)
+        try { doc.catalog.delete(ctx.obj('Metadata')) } catch {}   // XMP metadata
+        try { doc.catalog.delete(ctx.obj('Names')) } catch {}      // JS tertanam / named JS
+        try { doc.catalog.delete(ctx.obj('AA')) } catch {}         // Additional actions (auto-trigger)
+        try { doc.catalog.delete(ctx.obj('OpenAction')) } catch {} // Aksi saat buka PDF
+        try {
+          doc.getPages().forEach(p => {
+            try { p.node.delete(ctx.obj('Thumb')) } catch {}        // Thumbnail halaman
+          })
+        } catch {}
+
+        if (level === 'deep_clean') {
+          setProgress(45, 'Menghapus elemen opsional…')
+          // Hapus bookmark (outline) — tidak wajib untuk membaca konten
+          try { doc.catalog.delete(ctx.obj('Outlines')) } catch {}
+          // Hapus tagged PDF structure — hanya untuk aksesibilitas, bukan konten
+          try { doc.catalog.delete(ctx.obj('MarkInfo')) } catch {}
+          try { doc.catalog.delete(ctx.obj('Lang')) } catch {}
+          try { doc.catalog.delete(ctx.obj('StructTreeRoot')) } catch {}
+          // Hapus per-halaman
+          doc.getPages().forEach(p => {
+            try { p.node.delete(ctx.obj('Annots')) } catch {}         // Anotasi (komentar, highlight)
+            try { p.node.delete(ctx.obj('Trans')) } catch {}           // Transisi halaman
+            try { p.node.delete(ctx.obj('AA')) } catch {}              // Additional actions per halaman
+            try { p.node.delete(ctx.obj('StructParents')) } catch {}  // Tagged PDF reference
+            try { p.node.delete(ctx.obj('Tabs')) } catch {}           // Tab order form
+          })
+        }
+
+        setProgress(78, 'Mengoptimasi & menyimpan…')
         const bytes = await doc.save({ useObjectStreams: true })
-        const cs = bytes.length
-        const saved    = Math.max(0, originalSize - cs)
+        const cs       = bytes.length
+        const saved    = originalSize - cs
         const savedPct = originalSize > 0 ? Math.max(0, Math.round(saved / originalSize * 100)) : 0
         results.value  = [makeResult(bytes, 'compressed.pdf')]
         setProgress(100, 'Selesai!')
-        return { originalSize, compressedSize: cs, saved, savedPct }
+        return { originalSize, compressedSize: cs, saved: Math.max(0, saved), savedPct, bigger: cs >= originalSize }
       }
+
+      // ── Smart: kompres gambar tertanam, teks tetap utuh ─────────
+      if (level === 'smart') {
+        setProgress(15, 'Memuat PDF…')
+        const doc = await PDFDocument.load(ab, { ignoreEncryption: true, updateMetadata: false })
+        const ctx = doc.context
+
+        // Lossless cleanup dulu
+        try { doc.catalog.delete(ctx.obj('Metadata')) } catch {}
+        try { doc.catalog.delete(ctx.obj('Names'))    } catch {}
+        try { doc.catalog.delete(ctx.obj('AA'))       } catch {}
+        try { doc.catalog.delete(ctx.obj('OpenAction')) } catch {}
+        try { doc.getPages().forEach(p => {
+          try { p.node.delete(ctx.obj('Thumb'))  } catch {}
+          try { p.node.delete(ctx.obj('Annots')) } catch {}
+        })} catch {}
+
+        // Kumpulkan semua image XObject ber-filter JPEG (DCTDecode)
+        setProgress(25, 'Mencari gambar tertanam…')
+        const imgObjects = []
+        for (const [ref, obj] of ctx.enumerateIndirectObjects()) {
+          if (!(obj instanceof PDFRawStream)) continue
+          const dict = obj.dict
+          const subtype = dict.get(PDFName.of('Subtype'))
+          if (subtype?.toString() !== '/Image') continue
+          const filter = dict.get(PDFName.of('Filter'))
+          if (filter?.toString() !== '/DCTDecode') continue
+          if (dict.get(PDFName.of('SMask'))) continue  // skip transparansi kompleks
+          imgObjects.push({ ref, obj, dict })
+        }
+
+        let compressed = 0
+        const QUALITY  = 0.72
+
+        for (let i = 0; i < imgObjects.length; i++) {
+          const { ref, obj, dict } = imgObjects[i]
+          setProgress(
+            Math.round(28 + (i / Math.max(imgObjects.length, 1)) * 60),
+            `Mengompres gambar ${i + 1}/${imgObjects.length}…`
+          )
+          try {
+            const origBytes = obj.contents
+            const blob = new Blob([origBytes], { type: 'image/jpeg' })
+            const url  = URL.createObjectURL(blob)
+            const img  = new Image()
+            await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url })
+            URL.revokeObjectURL(url)
+
+            const cv  = document.createElement('canvas')
+            cv.width  = img.naturalWidth; cv.height = img.naturalHeight
+            const c2d = cv.getContext('2d')
+            c2d.drawImage(img, 0, 0)
+
+            const newB64   = cv.toDataURL('image/jpeg', QUALITY).split(',')[1]
+            const newBytes = Uint8Array.from(atob(newB64), c => c.charCodeAt(0))
+
+            if (newBytes.length < origBytes.length) {
+              dict.set(PDFName.of('Length'), ctx.obj(newBytes.length))
+              ctx.assign(ref, PDFRawStream.of(dict, newBytes))
+              compressed++
+            }
+          } catch { /* skip gambar yang tidak bisa diproses */ }
+        }
+
+        setProgress(92, 'Menyimpan…')
+        const bytes    = await doc.save({ useObjectStreams: true })
+        const cs       = bytes.length
+        const saved    = originalSize - cs
+        const savedPct = originalSize > 0 ? Math.max(0, Math.round(saved / originalSize * 100)) : 0
+        results.value  = [makeResult(bytes, 'compressed.pdf')]
+        setProgress(100, 'Selesai!')
+        return {
+          originalSize, compressedSize: cs,
+          saved: Math.max(0, saved), savedPct,
+          bigger: cs >= originalSize,
+          imagesFound: imgObjects.length,
+          imagesCompressed: compressed,
+        }
+      }
+
+      // ── Lossy JPEG re-render ──────────────────────────────────
+      // Scale = pixel per PDF-point saat render.
+      // Semakin KECIL scale → gambar lebih kecil → file lebih kecil.
+      // Contoh A4 (595×842 pt):
+      //   scale 1.5 → 893×1263 px  (~108 DPI)  kualitas tinggi
+      //   scale 1.0 → 595× 842 px  (~72  DPI)  sedang
+      //   scale 0.7 → 416× 589 px  (~50  DPI)  kecil
+      const cfg = {
+        light:    { scale: 1.5,  quality: 0.90 },
+        standard: { scale: 1.0,  quality: 0.78 },
+        max:      { scale: 0.70, quality: 0.65 },
+      }[level] || { scale: 1.0, quality: 0.78 }
 
       setProgress(5, 'Memuat engine render…')
       await loadPDFjs()
-
-      const quality = level === 'extreme' ? 0.40 : 0.75
-      const scale   = level === 'extreme' ? 1.2  : 1.5
 
       const srcPDF = await pdfjsLib.getDocument({ data: ab.slice(0) }).promise
       const outDoc = await PDFDocument.create()
       const total  = srcPDF.numPages
 
       for (let i = 1; i <= total; i++) {
-        setProgress(Math.round(10 + (i / total) * 82), `Mengkompresi halaman ${i} / ${total}…`)
+        setProgress(Math.round(10 + (i / total) * 82), `Halaman ${i} / ${total}…`)
         const page = await srcPDF.getPage(i)
         const vp0  = page.getViewport({ scale: 1 })
-        const vp   = page.getViewport({ scale })
+        const vp   = page.getViewport({ scale: cfg.scale })
         const cv   = document.createElement('canvas')
         cv.width   = Math.round(vp.width); cv.height = Math.round(vp.height)
         const ctx  = cv.getContext('2d')
         ctx.fillStyle = '#ffffff'
         ctx.fillRect(0, 0, cv.width, cv.height)
         await page.render({ canvasContext: ctx, viewport: vp }).promise
-        const b64   = cv.toDataURL('image/jpeg', quality).split(',')[1]
+        const b64   = cv.toDataURL('image/jpeg', cfg.quality).split(',')[1]
         const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
         const img   = await outDoc.embedJpg(bytes)
         const pg    = outDoc.addPage([vp0.width, vp0.height])
@@ -333,13 +492,13 @@ export function usePdfProcessor() {
       }
 
       setProgress(94, 'Menyimpan PDF…')
-      const out  = await outDoc.save({ useObjectStreams: true })
-      const cs   = out.length
-      const saved    = Math.max(0, originalSize - cs)
+      const out      = await outDoc.save({ useObjectStreams: true })
+      const cs       = out.length
+      const saved    = originalSize - cs
       const savedPct = originalSize > 0 ? Math.max(0, Math.round(saved / originalSize * 100)) : 0
       results.value  = [makeResult(out, 'compressed.pdf')]
       setProgress(100, 'Selesai!')
-      return { originalSize, compressedSize: cs, saved, savedPct }
+      return { originalSize, compressedSize: cs, saved: Math.max(0, saved), savedPct, bigger: cs >= originalSize }
 
     } catch (e) {
       errMsg.value = 'Kompresi gagal: ' + e.message
@@ -548,10 +707,55 @@ ul,ol{margin:.3em 0;padding-left:1.4em}
 
       setProgress(70, 'Merender tabel...')
 
+      // Convert Excel date serial to DD/MM/YYYY using pure UTC arithmetic (no timezone)
+      const p2 = n => String(n).padStart(2, '0')
+      function excelDateToStr(serial) {
+        const d = new Date(Math.round((serial - 25569) * 86400 * 1000))
+        return `${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`
+      }
+
       let sheetsHtml = ''
       for (const sheetName of wb.SheetNames) {
         const ws = wb.Sheets[sheetName]
-        const tableHtml = window.XLSX.utils.sheet_to_html(ws, { editable: false })
+
+        if (!ws['!ref']) continue
+
+        const range = window.XLSX.utils.decode_range(ws['!ref'])
+
+        let tableHtml = '<table>'
+        for (let ri = range.s.r; ri <= range.e.r; ri++) {
+          const cells = []
+          let rowHasContent = false
+
+          for (let ci = range.s.c; ci <= range.e.c; ci++) {
+            const ref  = window.XLSX.utils.encode_cell({ r: ri, c: ci })
+            const cell = ws[ref]
+            let val = ''
+            if (cell) {
+              const fmt = (cell.z || '').toLowerCase()
+              const isDate = cell.t === 'n' && typeof cell.v === 'number' && /[dy]/.test(fmt)
+              if (isDate) {
+                val = excelDateToStr(cell.v)
+              } else {
+                val = cell.w !== undefined ? cell.w : String(cell.v ?? '')
+              }
+            }
+            if (val.trim()) rowHasContent = true
+            cells.push(val)
+          }
+
+          if (!rowHasContent) continue  // Skip baris benar-benar kosong
+
+          const isHeader = ri === range.s.r
+          tableHtml += '<tr>' +
+            cells.map(v => isHeader
+              ? `<th>${escHtml(v)}</th>`
+              : `<td>${escHtml(v)}</td>`
+            ).join('') +
+          '</tr>'
+        }
+        tableHtml += '</table>'
+
         sheetsHtml += `<div class="sheet-wrap"><h2 class="sheet-title">${escHtml(sheetName)}</h2>${tableHtml}</div>`
       }
 
@@ -568,8 +772,9 @@ body{font-family:'Calibri','Arial',sans-serif;font-size:10pt;color:#000;margin:0
 .sheet-wrap:last-child{page-break-after:avoid}
 .sheet-title{font-size:13pt;font-weight:700;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #333}
 table{border-collapse:collapse;width:100%;font-size:9pt}
-td,th{border:1px solid #ccc;padding:3px 6px;vertical-align:middle;min-width:50px;white-space:pre-wrap}
-tr:nth-child(even){background:#f8f8f8}
+td,th{border:1px solid #ccc;padding:4px 8px;vertical-align:middle;min-width:40px;white-space:pre-wrap}
+th{background:#e8e8e8;font-weight:700;text-align:left}
+tr:nth-child(even) td{background:#f8f8f8}
 @media print{.page{padding:10mm}}
 </style>
 </head>
@@ -801,37 +1006,232 @@ tr:nth-child(even){background:#f8f8f8}
       const ab = await readAB(file)
       const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(ab) }).promise
 
-      const wb = window.XLSX.utils.book_new()
-
+      // Pass 1: collect ALL items with font size, filtering browser print headers/footers
+      setProgress(20, 'Mendeteksi kolom...')
+      const pageItems = []
       for (let i = 1; i <= pdf.numPages; i++) {
-        setProgress(Math.round(15 + (i / pdf.numPages) * 75), `Mengekstrak halaman ${i}/${pdf.numPages}...`)
         const page = await pdf.getPage(i)
+        const vp = page.getViewport({ scale: 1 })
         const tc = await page.getTextContent()
+        // Exclude items in top/bottom 6% of page (browser print header/footer area)
+        const marginY = vp.height * 0.06
+        const items = tc.items
+          .filter(it => it.str.trim())
+          .filter(it => it.transform[5] > marginY && it.transform[5] < vp.height - marginY)
+          .map(it => ({
+            x: it.transform[4],
+            y: it.transform[5],
+            str: it.str.trim(),
+            size: Math.abs(it.transform[3])
+          }))
+        pageItems.push(items)
+      }
 
-        const byY = new Map()
-        for (const item of tc.items) {
-          if (!item.str.trim()) continue
-          const y = Math.round(item.transform[5] / 4) * 4
-          if (!byY.has(y)) byY.set(y, [])
-          byY.get(y).push({ x: item.transform[4], str: item.str })
+      const allItems = pageItems.flat()
+
+      // Detect base (body) font size = most frequent size
+      const sizeFreq = {}
+      allItems.forEach(it => { const s = Math.round(it.size); sizeFreq[s] = (sizeFreq[s] || 0) + 1 })
+      const baseSize = Number(Object.entries(sizeFreq).sort((a, b) => b[1] - a[1])[0][0])
+
+      // Global column detection using X positions from all pages
+      const colCenters = clusterValues(allItems.map(it => it.x), 20)
+      const numCols = colCenters.length
+
+      // Pass 2: build sections — each section title (large font) → new sheet
+      const thin = { style: 'thin', color: { rgb: '000000' } }
+      const borderAll = { top: thin, bottom: thin, left: thin, right: thin }
+
+      const sections = []
+      let cur = { name: 'Sheet1', rows: [] }
+
+      const sanitizeSheetName = s => s.replace(/[\\/?*[\]:]/g, '').slice(0, 31) || 'Sheet'
+
+      for (let i = 0; i < pageItems.length; i++) {
+        setProgress(Math.round(30 + (i / pdf.numPages) * 60), `Mengekstrak halaman ${i + 1}/${pdf.numPages}...`)
+        const items = pageItems[i]
+        if (items.length === 0) continue
+
+        const rowGroups = groupByRow(items, 12)
+
+        for (const rowItems of rowGroups) {
+          const avgSize = rowItems.reduce((s, it) => s + it.size, 0) / rowItems.length
+          const isTitle = avgSize > baseSize * 1.25 && rowItems.length <= 4
+
+          if (isTitle) {
+            if (cur.rows.length > 0) sections.push(cur)
+            cur = { name: sanitizeSheetName(rowItems.map(it => it.str).join(' ')), rows: [] }
+          } else {
+            const row = new Array(numCols).fill('')
+            for (const item of rowItems) {
+              const c = nearestIdx(colCenters, item.x)
+              row[c] = row[c] ? row[c] + ' ' + item.str : item.str
+            }
+            // Merge continuation rows: only exactly 1 cell filled AND that column
+            // already has content in the previous row (true wrap continuation)
+            const nonEmpty = row.filter(v => v).length
+            const filledIdx = nonEmpty === 1 ? row.findIndex(v => v) : -1
+            if (filledIdx >= 0 && cur.rows.length > 0 && cur.rows[cur.rows.length - 1][filledIdx]) {
+              cur.rows[cur.rows.length - 1][filledIdx] += ' ' + row[filledIdx]
+            } else {
+              cur.rows.push(row)
+            }
+          }
         }
+      }
+      if (cur.rows.length > 0) sections.push(cur)
+      if (sections.length === 0) sections.push({ name: 'Sheet1', rows: [] })
 
-        const rows = [...byY.entries()]
-          .sort((a, b) => b[0] - a[0])
-          .map(([, items]) => items.sort((a, b) => a.x - b.x).map(it => it.str))
+      // Build workbook — one sheet per section
+      const wb = window.XLSX.utils.book_new()
+      const usedNames = new Set()
+      for (const sec of sections) {
+        let sheetName = sec.name
+        if (usedNames.has(sheetName)) { let n = 2; while (usedNames.has(sheetName + n)) n++; sheetName += n }
+        usedNames.add(sheetName)
 
-        const ws = window.XLSX.utils.aoa_to_sheet(rows)
-        const sheetName = pdf.numPages === 1 ? 'Sheet1' : `Halaman ${i}`
+        const colWidths = new Array(numCols).fill(4)
+        sec.rows.forEach(row => row.forEach((val, c) => { if (val.length > colWidths[c]) colWidths[c] = val.length }))
+
+        const ws = {}
+        sec.rows.forEach((row, r) => {
+          for (let c = 0; c < numCols; c++) {
+            ws[window.XLSX.utils.encode_cell({ r, c })] = { t: 's', v: row[c] || '', s: { border: borderAll } }
+          }
+        })
+        if (sec.rows.length > 0) {
+          ws['!ref'] = window.XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sec.rows.length - 1, c: numCols - 1 } })
+          ws['!cols'] = colWidths.map(w => ({ wch: Math.max(6, Math.min(w + 2, 50)) }))
+        }
         window.XLSX.utils.book_append_sheet(wb, ws, sheetName)
       }
 
       setProgress(93, 'Menyimpan...')
-      const bytes = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-      const outName = file.name.replace(/\.pdf$/i, '') + '.xlsx'
+      const bytes = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true })
+      const baseName = file.name.replace(/\.pdf$/i, '').replace(/\.xlsx?$/i, '')
+      const outName = baseName + '.xlsx'
       const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(bytes.length) }]
+      results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(blob.size) }]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doCropPDF(file, { top = 0, right = 0, bottom = 0, left = 0 } = {}) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(20, 'Membaca PDF…')
+      const ab  = await readAB(file)
+      const doc = await PDFDocument.load(ab)
+      const MM  = 2.8346
+      const pages = doc.getPages()
+      pages.forEach((page, i) => {
+        setProgress(Math.round(20 + (i / pages.length) * 65), `Memotong halaman ${i + 1}…`)
+        const { width, height } = page.getSize()
+        const x = left * MM
+        const y = bottom * MM
+        const w = width  - (left + right)  * MM
+        const h = height - (top  + bottom) * MM
+        if (w > 0 && h > 0) page.setCropBox(x, y, w, h)
+      })
+      setProgress(90, 'Menyimpan…')
+      results.value = [makeResult(await doc.save(), 'cropped.pdf')]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal memotong: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doRepairPDF(file) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(30, 'Membaca PDF…')
+      const ab  = await readAB(file)
+      setProgress(60, 'Memulihkan struktur…')
+      const doc = await PDFDocument.load(ab, { ignoreEncryption: true, updateMetadata: false })
+      setProgress(85, 'Menyimpan…')
+      results.value = [makeResult(await doc.save({ useObjectStreams: true }), 'repaired.pdf')]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal memulihkan: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doSignPDF(file, pngDataUrl, pageTarget = 'last', position = 'bottom-right', widthPt = 150) {
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(20, 'Membaca PDF…')
+      const ab  = await readAB(file)
+      const doc = await PDFDocument.load(ab)
+      setProgress(45, 'Memuat tanda tangan…')
+      const b64      = pngDataUrl.split(',')[1]
+      const sigBytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+      const sigImg   = await doc.embedPng(sigBytes)
+      const pages    = doc.getPages()
+      const total    = pages.length
+      const targets  = pageTarget === 'first' ? [0]
+                     : pageTarget === 'all'   ? pages.map((_, i) => i)
+                     :                         [total - 1]
+      setProgress(65, 'Menambahkan tanda tangan…')
+      for (const idx of targets) {
+        const page = pages[idx]
+        const { width, height } = page.getSize()
+        const ratio = sigImg.height / sigImg.width
+        const sigW  = widthPt
+        const sigH  = widthPt * ratio
+        const pad   = 24
+        const x = position === 'bottom-left'   ? pad
+                : position === 'bottom-center'  ? (width - sigW) / 2
+                :                                 width - sigW - pad
+        page.drawImage(sigImg, { x, y: pad, width: sigW, height: sigH })
+      }
+      setProgress(90, 'Menyimpan…')
+      results.value = [makeResult(await doc.save(), 'signed.pdf')]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
+    finally { processing.value = false }
+  }
+
+  async function doRedactPDF(file, redactions) {
+    // redactions: { pageIndex: [{relX, relY, relW, relH}] }
+    processing.value = true; errMsg.value = ''; results.value = []
+    try {
+      setProgress(5, 'Memuat engine…')
+      await loadPDFjs()
+      setProgress(15, 'Membaca PDF…')
+      const ab     = await readAB(file)
+      const srcDoc = await PDFDocument.load(ab, { ignoreEncryption: true })
+      const srcJs  = await pdfjsLib.getDocument({ data: ab.slice(0) }).promise
+      const outDoc = await PDFDocument.create()
+      const total  = srcDoc.getPageCount()
+      for (let i = 0; i < total; i++) {
+        setProgress(Math.round(15 + (i / total) * 78), `Halaman ${i + 1}/${total}…`)
+        const rects = redactions[i]
+        if (!rects || !rects.length) {
+          const [copied] = await outDoc.copyPages(srcDoc, [i])
+          outDoc.addPage(copied)
+        } else {
+          const pdfPage = await srcJs.getPage(i + 1)
+          const vp  = pdfPage.getViewport({ scale: 2 })
+          const cv  = document.createElement('canvas')
+          cv.width  = Math.round(vp.width); cv.height = Math.round(vp.height)
+          const ctx = cv.getContext('2d')
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height)
+          await pdfPage.render({ canvasContext: ctx, viewport: vp }).promise
+          ctx.fillStyle = '#000'
+          for (const r of rects) {
+            ctx.fillRect(r.relX * cv.width, r.relY * cv.height, r.relW * cv.width, r.relH * cv.height)
+          }
+          const b64   = cv.toDataURL('image/jpeg', 0.92).split(',')[1]
+          const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+          const img   = await outDoc.embedJpg(bytes)
+          const { width, height } = srcDoc.getPage(i).getSize()
+          const newPg = outDoc.addPage([width, height])
+          newPg.drawImage(img, { x: 0, y: 0, width, height })
+        }
+      }
+      setProgress(95, 'Menyimpan…')
+      results.value = [makeResult(await outDoc.save({ useObjectStreams: true }), 'redacted.pdf')]
+      setProgress(100, 'Selesai!')
+    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
     finally { processing.value = false }
   }
 
@@ -843,5 +1243,6 @@ tr:nth-child(even){background:#f8f8f8}
     doWord2PDF, doExcel2PDF, doPDF2Docx, doPDF2Xlsx,
     doRemovePages, doExtractPages, doWatermark,
     doImgConvert, doExcel2Csv, doWord2Txt,
+    doCropPDF, doRepairPDF, doSignPDF, doRedactPDF,
   }
 }

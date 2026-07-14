@@ -18,6 +18,7 @@ import {
   File, Smartphone, RefreshCw, FolderOpen, Lock, Unlock,
   FileMinus, Copy, Layers, FileInput, ChevronDown, Eye, EyeOff,
   ImagePlus, Shuffle, AlignLeft, List,
+  Crop, Wrench, PenLine, Eraser, Code2,
 } from '@lucide/vue'
 
 const ICONS = {
@@ -28,6 +29,7 @@ const ICONS = {
   File, Smartphone, RefreshCw, FolderOpen, Lock, Unlock,
   FileMinus, Copy, Layers, FileInput, ChevronDown, Eye, EyeOff,
   ImagePlus, Shuffle, AlignLeft, List,
+  Crop, Wrench, PenLine, Eraser, Code2,
 }
 
 const props = defineProps({

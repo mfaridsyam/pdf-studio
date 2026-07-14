@@ -3,6 +3,11 @@
 :root {
   --font: 'Outfit', system-ui, -apple-system, sans-serif;
 
+  /* Brand */
+  --brand:       #E02B20;
+  --brand-dark:  #b91c1c;
+  --brand-light: #fff5f5;
+
   /* Zinc monochrome scale */
   --c-white: #FFFFFF;
   --c-50:    #FAFAFA;
@@ -22,13 +27,13 @@
   --text-2:    var(--c-500);
   --text-3:    var(--c-400);
   --surface:   var(--c-white);
-  --bg:        var(--c-50);
+  --bg:        #F7F8FC;
   --border:    var(--c-200);
   --border-2:  var(--c-300);
   --shadow:    0 1px 2px rgba(0,0,0,.05), 0 2px 4px rgba(0,0,0,.04);
-  --shadow-md: 0 4px 8px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.04);
-  --radius:    10px;
-  --radius-sm: 6px;
+  --shadow-md: 0 4px 12px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.04);
+  --radius:    18px;
+  --radius-sm: 8px;
 
   /* Functional state colors — kept only for semantic meaning */
   --green:        #16a34a;
@@ -53,6 +58,7 @@ body {
   background: var(--bg);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
 }
 

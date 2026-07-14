@@ -90,25 +90,27 @@ function onDrop(e) {
   width: 100%;
   height: 100%;
 }
-.dz-icon  { color: var(--c-400); margin-bottom: 12px; display: flex; justify-content: center; }
+.dz-icon  { color: var(--c-300); margin-bottom: 14px; display: flex; justify-content: center; }
 .dropzone:hover .dz-icon,
-.dropzone.over .dz-icon { color: var(--c-700); }
-.dz-title { font-size: 14.5px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
-.dz-sub   { font-size: 13px; color: var(--text-2); margin-bottom: 18px; }
+.dropzone.over .dz-icon { color: var(--c-500); }
+.dz-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+.dz-sub   { font-size: 13px; color: var(--text-2); margin-bottom: 20px; line-height: 1.5; max-width: 320px; margin-left: auto; margin-right: auto; }
 .dz-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 18px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 500;
-  border: 1.5px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
+  padding: 10px 22px;
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  background: var(--tool-clr, var(--c-950));
+  color: #fff;
   cursor: pointer;
   font-family: var(--font);
   pointer-events: none;
-  transition: all .2s ease;
+  transition: opacity .2s ease, transform .2s ease;
+  box-shadow: 0 2px 10px rgba(0,0,0,.15);
 }
+.dropzone:hover .dz-btn { opacity: .88; transform: translateY(-1px); }
 </style>
