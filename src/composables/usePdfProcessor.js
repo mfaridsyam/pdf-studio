@@ -61,6 +61,13 @@ function outputName(source, ext, suffix = '') {
   return `${base || 'dokumen'}${suffix}_pdfstudio${ext}`
 }
 
+// pdf-lib melempar string biasa, bukan objek Error, di beberapa jalur (mis.
+// embedPng menolak berkas non-PNG). Membaca .message dari string menghasilkan
+// undefined, sehingga user melihat "Gagal konversi: undefined".
+function pesanError(e) {
+  return e?.message ?? String(e ?? 'kesalahan tidak diketahui')
+}
+
 function escXml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -307,7 +314,7 @@ export function usePdfProcessor() {
       setProgress(96, 'Menyimpan…')
       results.value = [makeResult(await merged.save({ useObjectStreams: true }), outputName(files[0], '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal menggabung: ' + e.message; console.error(e) }
+    } catch (e) { errMsg.value = 'Gagal menggabung: ' + pesanError(e); console.error(e) }
     finally { processing.value = false }
   }
 
@@ -334,7 +341,7 @@ export function usePdfProcessor() {
       }
       results.value = res
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal memisah: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal memisah: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -517,7 +524,7 @@ export function usePdfProcessor() {
       return { originalSize, compressedSize: cs, saved: Math.max(0, saved), savedPct, bigger: cs >= originalSize }
 
     } catch (e) {
-      errMsg.value = 'Kompresi gagal: ' + e.message
+      errMsg.value = 'Kompresi gagal: ' + pesanError(e)
       console.error('[doCompress]', e)
       return null
     } finally { processing.value = false }
@@ -536,7 +543,7 @@ export function usePdfProcessor() {
       setProgress(96, 'Menyimpan…')
       results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal memutar: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal memutar: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -553,8 +560,34 @@ export function usePdfProcessor() {
       setProgress(88, 'Menyimpan…')
       results.value = [makeResult(await out.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal mengatur ulang: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal mengatur ulang: ' + pesanError(e) }
     finally { processing.value = false }
+  }
+
+  // pdf-lib hanya bisa menanam JPEG dan PNG. WebP, GIF, BMP, dan AVIF ditolak
+  // mentah-mentah — padahal DropZone menerima image/* dan menawarkan WebP.
+  // Format lain dinormalkan dulu lewat canvas menjadi PNG. Jenis berkas dikenali
+  // dari magic bytes, bukan file.type, yang bisa kosong saat berkas diseret.
+  async function siapkanGambar(file) {
+    const ab = await readAB(file)
+    const b  = new Uint8Array(ab)
+    const jpeg = b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff
+    const png  = b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47
+    if (jpeg) return { data: ab, jenis: 'jpeg' }
+    if (png)  return { data: ab, jenis: 'png' }
+
+    const img = await new Promise((res, rej) => {
+      const el  = new Image()
+      const url = URL.createObjectURL(file)
+      el.onload  = () => { URL.revokeObjectURL(url); res(el) }
+      el.onerror = () => { URL.revokeObjectURL(url); rej(new Error(`Format gambar "${file.name}" tidak didukung browser.`)) }
+      el.src = url
+    })
+    const cv = document.createElement('canvas')
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight
+    cv.getContext('2d').drawImage(img, 0, 0)
+    const b64 = cv.toDataURL('image/png').split(',')[1]
+    return { data: Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), jenis: 'png' }
   }
 
   async function doImg2PDF(files, pageSz = 'A4') {
@@ -564,10 +597,8 @@ export function usePdfProcessor() {
       const sizes = { A4: [595.28, 841.89], Letter: [612, 792] }
       for (let i = 0; i < files.length; i++) {
         setProgress(Math.round(5 + (i / files.length) * 88), `Gambar ${i + 1} / ${files.length}…`)
-        const ab   = await readAB(files[i])
-        const mime = files[i].type
-        const img  = (mime === 'image/jpeg' || mime === 'image/jpg')
-          ? await doc.embedJpg(ab) : await doc.embedPng(ab)
+        const { data, jenis } = await siapkanGambar(files[i])
+        const img = jenis === 'jpeg' ? await doc.embedJpg(data) : await doc.embedPng(data)
         let pw, ph
         if (pageSz === 'fit') { pw = img.width; ph = img.height }
         else { const s = sizes[pageSz] || sizes.A4; pw = s[0]; ph = s[1] }
@@ -581,12 +612,15 @@ export function usePdfProcessor() {
       setProgress(96, 'Menyimpan…')
       results.value = [makeResult(await doc.save(), outputName(files[0], '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
-  async function doPDF2Img(file, scale = 2) {
+  // Tool ini bernama "PDF ke JPG" tapi dulu selalu mengeluarkan PNG.
+  async function doPDF2Img(file, scale = 2, format = 'jpg') {
     processing.value = true; errMsg.value = ''; results.value = []
+    const mime = format === 'png' ? 'image/png' : 'image/jpeg'
+    const ext  = format === 'png' ? '.png' : '.jpg'
     try {
       setProgress(5, 'Memuat engine render…')
       await loadPDFjs()
@@ -602,11 +636,11 @@ export function usePdfProcessor() {
         const ctx = cv.getContext('2d')
         ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height)
         await pg.render({ canvasContext: ctx, viewport: vp }).promise
-        res.push(makeImgResult(cv.toDataURL('image/png'), outputName(file, '.png', `_halaman_${i}`)))
+        res.push(makeImgResult(cv.toDataURL(mime, 0.92), outputName(file, ext, `_halaman_${i}`)))
       }
       results.value = res
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -632,7 +666,7 @@ export function usePdfProcessor() {
       setProgress(94, 'Menyimpan…')
       results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -647,7 +681,7 @@ export function usePdfProcessor() {
       setProgress(88, 'Menyimpan…')
       results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal enkripsi: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal enkripsi: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -689,7 +723,7 @@ export function usePdfProcessor() {
 
       results.value = [makeResult(await out.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal membuka kunci: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal membuka kunci: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -734,7 +768,7 @@ ul,ol{margin:.3em 0;padding-left:1.4em}
       setProgress(100, 'Siap!')
       return { html, name: outputName(file, '.pdf') }
     } catch (e) {
-      errMsg.value = 'Gagal konversi: ' + e.message
+      errMsg.value = 'Gagal konversi: ' + pesanError(e)
       return null
     } finally { processing.value = false }
   }
@@ -828,7 +862,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       setProgress(100, 'Siap!')
       return { html, name: outputName(file, '.pdf') }
     } catch (e) {
-      errMsg.value = 'Gagal konversi: ' + e.message
+      errMsg.value = 'Gagal konversi: ' + pesanError(e)
       return null
     } finally { processing.value = false }
   }
@@ -895,7 +929,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
       results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(bytes.length) }]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -926,7 +960,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       }
       results.value = res
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -947,7 +981,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       const outName = outputName(file, '.csv')
       results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(blob.size) }]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -964,7 +998,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       const outName = outputName(file, '.txt')
       results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(blob.size) }]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -984,7 +1018,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       setProgress(88, 'Menyimpan…')
       results.value = [makeResult(await out.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -1003,7 +1037,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       setProgress(88, 'Menyimpan…')
       results.value = [makeResult(await out.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -1035,7 +1069,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       setProgress(90, 'Menyimpan…')
       results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -1156,7 +1190,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(blob.size) }]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal konversi: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -1180,7 +1214,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       setProgress(90, 'Menyimpan…')
       results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal memotong: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal memotong: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -1386,7 +1420,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       setProgress(90, 'Menyimpan…')
       results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal: ' + pesanError(e) }
     finally { processing.value = false }
   }
 
@@ -1431,7 +1465,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       setProgress(95, 'Menyimpan…')
       results.value = [makeResult(await outDoc.save({ useObjectStreams: true }), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal: ' + e.message }
+    } catch (e) { errMsg.value = 'Gagal: ' + pesanError(e) }
     finally { processing.value = false }
   }
 

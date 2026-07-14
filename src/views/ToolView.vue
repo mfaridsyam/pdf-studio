@@ -441,8 +441,20 @@
 
           <!-- PDF TO IMG -->
           <template v-if="tool.id === 'pdf2img'">
-            <DropZone icon="UploadCloud" file-type="pdf" accept=".pdf" title="Pilih file PDF" subtitle="Setiap halaman dikonversi menjadi gambar PNG" @files="setSingle" />
+            <DropZone icon="UploadCloud" file-type="pdf" accept=".pdf" title="Pilih file PDF" subtitle="Setiap halaman dikonversi menjadi satu gambar" @files="setSingle" />
             <FileList :files="files" @remove="removeFile" />
+            <div class="opts-block" v-if="files.length">
+              <span class="opts-label">Format Gambar</span>
+              <div class="opts-row">
+                <button class="chip" :class="{ sel: imgFormat === 'jpg' }" @click="imgFormat = 'jpg'">JPG</button>
+                <button class="chip" :class="{ sel: imgFormat === 'png' }" @click="imgFormat = 'png'">PNG</button>
+              </div>
+              <p class="opts-hint">
+                {{ imgFormat === 'jpg'
+                  ? 'Ukuran berkas lebih kecil — cocok untuk dokumen dan foto.'
+                  : 'Tanpa kehilangan kualitas — cocok untuk teks tajam dan diagram.' }}
+              </p>
+            </div>
             <div class="opts-block" v-if="files.length">
               <span class="opts-label">Kualitas / Resolusi</span>
               <div class="opts-row">
@@ -1251,6 +1263,7 @@ const pageTo         = ref(1)
 const rotDeg         = ref(90)
 const imgPageSz      = ref('A4')
 const imgScale       = ref(2)
+const imgFormat      = ref('jpg')
 const pageNumPos     = ref('bottom-center')
 const pdfPass        = ref('')
 const compressLevel  = ref('smart')
@@ -1543,7 +1556,7 @@ async function run() {
   if (id === 'reorder')    await doReorder(files.value[0], pageOrder.value)
   if (id === 'pagenumber') await doPageNumber(files.value[0], pageNumPos.value)
   if (id === 'img2pdf')    await doImg2PDF(files.value, imgPageSz.value)
-  if (id === 'pdf2img')    await doPDF2Img(files.value[0], imgScale.value)
+  if (id === 'pdf2img')    await doPDF2Img(files.value[0], imgScale.value, imgFormat.value)
   if (id === 'protect')    await doProtect(files.value[0], pdfPass.value)
   if (id === 'unlock')     await doUnlock(files.value[0], pdfPass.value)
   if (id === 'word2pdf')  { const r = await doWord2PDF(files.value[0]);  if (r) htmlPreview.value = r }

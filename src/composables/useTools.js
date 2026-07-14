@@ -34,7 +34,7 @@ export const TOOLS = [
   { id: 'unlock',       cat: 'keamanan', icon: 'Unlock',          name: 'Buka PDF Terkunci', desc: 'Hapus keamanan kata sandi PDF, sehingga Anda bebas menggunakan PDF sesuai keinginan.',                                                        ...C  },
 
   // ── KONVERSI ──────────────────────────────────────────────────
-  { id: 'pdf2img',      cat: 'konversi', icon: 'Camera',          name: 'PDF ke JPG',        desc: 'Konversi setiap halaman PDF ke JPG atau ekstrak semua gambar yang tersimpan dalam PDF.',                                                      ...O  },
+  { id: 'pdf2img',      cat: 'konversi', icon: 'Camera',          name: 'PDF ke JPG',        desc: 'Ubah setiap halaman PDF menjadi gambar JPG atau PNG, dengan resolusi yang bisa dipilih.',                                                     ...O  },
   { id: 'pdf2docx',     cat: 'konversi', icon: 'FileOutput',      name: 'PDF ke Word',       desc: 'Ambil teks dari PDF menjadi dokumen DOCX yang siap diedit. Gambar dan tata letak tidak ikut terbawa.',                                       ...WB },
   { id: 'pdf2xlsx',     cat: 'konversi', icon: 'FileSpreadsheet', name: 'PDF ke Excel',      desc: 'Ambil data langsung dari PDF menjadi spreadsheet Excel dalam beberapa detik.',                                                                 ...XG },
   { id: 'img2pdf',      cat: 'konversi', icon: 'ImagePlus',       name: 'JPG ke PDF',        desc: 'Konversi gambar JPG ke PDF dalam hitungan detik. Sesuaikan orientasi dan margin dengan mudah.',                                                ...O  },
