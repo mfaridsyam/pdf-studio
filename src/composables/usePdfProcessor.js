@@ -1199,6 +1199,86 @@ tr:nth-child(even) td{background:#f8f8f8}
     return out
   }
 
+  const keLatin1 = (u8) => new TextDecoder('latin1').decode(u8)
+  const dariLatin1 = (s) => Uint8Array.from(s, (c) => c.charCodeAt(0) & 0xff)
+
+  // Bila tabel xref, pohon halaman, atau katalog ikut hancur, kedua parser
+  // menyerah atas seluruh berkas — padahal halaman yang sehat masih ada di
+  // dalamnya. Di sini objek dipindai langsung dari byte mentah, halaman yang
+  // isinya masih utuh diselamatkan, lalu pohon halaman + katalog + xref
+  // disusun baru. Teks tetap teks (tidak dirasterisasi).
+  // Catatan: hanya untuk PDF berstruktur klasik. PDF yang objeknya dipadatkan
+  // dalam object stream tidak terbaca di sini — itu ditangani tahap pdf.js.
+  function rekonstruksiObjek(u8) {
+    const txt  = keLatin1(u8)
+    const objs = new Map()
+    const re   = /(\d+)\s+(\d+)\s+obj\b/g
+    let m
+    while ((m = re.exec(txt))) {
+      const end = txt.indexOf('endobj', re.lastIndex)
+      if (end === -1) continue          // objek terpotong — buang
+      objs.set(Number(m[1]), txt.slice(m.index, end + 6))
+    }
+
+    // /Contents bisa berupa rujukan langsung ("8 0 R") atau array ("[ 6 0 R ]")
+    const refsIsi = (raw) => {
+      const c = raw.match(/\/Contents\s*(\[[^\]]*\]|\d+\s+\d+\s+R)/)
+      return c ? [...c[1].matchAll(/(\d+)\s+\d+\s+R/g)].map((x) => Number(x[1])) : []
+    }
+
+    const halaman = []
+    for (const [n, raw] of objs) {
+      if (!/\/Type\s*\/Page[^s]/.test(raw)) continue
+      const isi = refsIsi(raw)
+      if (!isi.length || !isi.every((r) => objs.has(r))) continue  // isinya hilang — halaman tak berguna
+      halaman.push(n)
+    }
+    if (!halaman.length) return null
+
+    const maxN     = Math.max(...objs.keys())
+    const refPages = maxN + 1
+    const refCat   = maxN + 2
+
+    for (const n of halaman) {
+      const raw = objs.get(n)
+      objs.set(n, /\/Parent\s+\d+\s+\d+\s+R/.test(raw)
+        ? raw.replace(/\/Parent\s+\d+\s+\d+\s+R/, `/Parent ${refPages} 0 R`)
+        : raw.replace(/>>\s*endobj\s*$/, `/Parent ${refPages} 0 R\n>>\nendobj`))
+    }
+    objs.set(refPages, `${refPages} 0 obj\n<< /Type /Pages /Kids [${halaman.map((n) => `${n} 0 R`).join(' ')}] /Count ${halaman.length} >>\nendobj`)
+    objs.set(refCat,   `${refCat} 0 obj\n<< /Type /Catalog /Pages ${refPages} 0 R >>\nendobj`)
+
+    let out = '%PDF-1.7\n'
+    const off = new Map()
+    for (const n of [...objs.keys()].sort((a, b) => a - b)) {
+      off.set(n, out.length)
+      out += objs.get(n) + '\n'
+    }
+    const size   = maxN + 3
+    const xrefAt = out.length
+    out += `xref\n0 ${size}\n0000000000 65535 f \n`
+    for (let i = 1; i < size; i++) {
+      out += off.has(i)
+        ? String(off.get(i)).padStart(10, '0') + ' 00000 n \n'
+        : '0000000000 65535 f \n'
+    }
+    out += `trailer\n<< /Size ${size} /Root ${refCat} 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`
+    return { bytes: dariLatin1(out), halaman: halaman.length }
+  }
+
+  // Jelaskan kenapa sebuah berkas benar-benar tidak bisa ditolong, alih-alih
+  // membocorkan pesan internal parser seperti "Invalid PDF structure".
+  function diagnosaKerusakan(u8) {
+    const txt = keLatin1(u8)
+    if (!/\d+\s+\d+\s+obj\b/.test(txt))
+      return 'Struktur objek PDF hancur total — tidak ada satu pun objek yang masih bisa dibaca.'
+    if (!/\bstream\b/.test(txt))
+      return 'Isi halaman sudah tidak ada di dalam berkas — bagian itu tertimpa data lain. Tidak ada yang tersisa untuk dipulihkan.'
+    if (!/\/Type\s*\/Page[^s]/.test(txt))
+      return 'Tidak ada objek halaman yang tersisa di dalam berkas.'
+    return 'Semua halaman yang tersisa sudah kehilangan isinya, jadi tidak ada yang bisa diselamatkan.'
+  }
+
   async function doRepairPDF(file) {
     processing.value = true; errMsg.value = ''; noticeMsg.value = ''; results.value = []
     try {
@@ -1218,17 +1298,37 @@ tr:nth-child(even) td{background:#f8f8f8}
         noticeMsg.value = `Struktur berhasil disusun ulang. ${doc.getPageCount()} halaman pulih dan teks tetap bisa disalin.`
         setProgress(100, 'Selesai!')
         return
-      } catch { /* pdf-lib menyerah — lanjut ke pemulihan darurat */ }
+      } catch { /* pdf-lib menyerah — lanjut ke rekonstruksi */ }
 
-      // Tahap 2 — pdf.js punya parser pemulihan yang lebih toleran, tapi tidak bisa
-      // menulis PDF vektor. Halaman diselamatkan dengan dirender ulang jadi gambar:
-      // isinya kembali, tapi teksnya tidak lagi bisa disalin. Ini upaya terakhir.
-      setProgress(55, 'Pemulihan darurat…')
+      // Tahap 2 — susun ulang dari objek mentah. Didahulukan sebelum rasterisasi
+      // karena teks tetap berupa teks, dan halaman yang sehat bisa diselamatkan
+      // walau sebagian halaman lain hancur.
+      setProgress(60, 'Menyelamatkan halaman yang tersisa…')
+      try {
+        const rk = rekonstruksiObjek(bytes)
+        if (rk) {
+          const doc = await PDFDocument.load(rk.bytes, {
+            ignoreEncryption: true, updateMetadata: false, throwOnInvalidObject: false,
+          })
+          const out = await doc.save({ useObjectStreams: true })
+          await PDFDocument.load(out, { ignoreEncryption: true })
+          results.value  = [makeResult(out, outputName(file, '.pdf'))]
+          noticeMsg.value = `${rk.halaman} halaman berhasil diselamatkan dan teksnya tetap bisa disalin. Halaman yang isinya sudah tertimpa tidak bisa dikembalikan.`
+          setProgress(100, 'Selesai!')
+          return
+        }
+      } catch { /* rekonstruksi gagal — lanjut ke pemulihan darurat */ }
+
+      // Tahap 3 — pdf.js punya parser pemulihan yang lebih toleran (termasuk untuk
+      // PDF ber-object stream yang tak terbaca tahap 2), tapi tidak bisa menulis PDF
+      // vektor. Halaman dirender ulang jadi gambar: isinya kembali, tapi teksnya
+      // tidak lagi bisa disalin. Upaya terakhir.
+      setProgress(75, 'Pemulihan darurat…')
       await loadPDFjs()
       const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0), stopAtErrors: false }).promise
       const out = await PDFDocument.create()
       for (let i = 1; i <= pdf.numPages; i++) {
-        setProgress(Math.round(55 + (i / pdf.numPages) * 38), `Menyelamatkan halaman ${i}/${pdf.numPages}…`)
+        setProgress(Math.round(75 + (i / pdf.numPages) * 20), `Merender ulang halaman ${i}/${pdf.numPages}…`)
         const pg  = await pdf.getPage(i)
         const vp0 = pg.getViewport({ scale: 1 })
         const vp  = pg.getViewport({ scale: 2 })
@@ -1245,8 +1345,13 @@ tr:nth-child(even) td{background:#f8f8f8}
       results.value  = [makeResult(await out.save({ useObjectStreams: true }), outputName(file, '.pdf'))]
       noticeMsg.value = `Kerusakan berat. ${pdf.numPages} halaman diselamatkan dengan render ulang — isinya kembali terlihat, tapi teks kini menjadi gambar dan tidak bisa disalin.`
       setProgress(100, 'Selesai!')
-    } catch (e) {
-      errMsg.value = 'PDF ini terlalu rusak untuk dipulihkan: ' + e.message
+    } catch {
+      // Jangan tampilkan pesan internal parser — jelaskan apa yang sebenarnya hilang.
+      try {
+        errMsg.value = diagnosaKerusakan(new Uint8Array(await readAB(file)))
+      } catch {
+        errMsg.value = 'PDF ini terlalu rusak untuk dipulihkan.'
+      }
     } finally { processing.value = false }
   }
 
