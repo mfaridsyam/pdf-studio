@@ -46,6 +46,18 @@ async function loadJSZip() {
   )
 }
 
+// Nama berkas hasil selalu "<nama asli>_pdfstudio<.ext>", mis. "Laporan Q3.pdf"
+// menjadi "Laporan Q3_pdfstudio.pdf". `suffix` dipakai bila satu sumber
+// menghasilkan banyak berkas (mis. per halaman saat split / PDF ke JPG).
+function outputName(source, ext, suffix = '') {
+  const raw  = typeof source === 'string' ? source : (source?.name || '')
+  const base = raw
+    .replace(/\.[^.]+$/, '')        // buang ekstensi asli
+    .replace(/[\\/:*?"<>|]/g, '_')  // karakter yang ilegal di nama berkas
+    .trim()
+  return `${base || 'dokumen'}${suffix}_pdfstudio${ext}`
+}
+
 function escXml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -289,7 +301,7 @@ export function usePdfProcessor() {
       }
 
       setProgress(96, 'Menyimpan…')
-      results.value = [makeResult(await merged.save({ useObjectStreams: true }), 'merged.pdf')]
+      results.value = [makeResult(await merged.save({ useObjectStreams: true }), outputName(files[0], '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal menggabung: ' + e.message; console.error(e) }
     finally { processing.value = false }
@@ -314,7 +326,7 @@ export function usePdfProcessor() {
         const d = await PDFDocument.create()
         const [p] = await d.copyPages(src, [idxs[i]])
         d.addPage(p)
-        res.push(makeResult(await d.save(), `halaman_${idxs[i] + 1}.pdf`))
+        res.push(makeResult(await d.save(), outputName(file, '.pdf', `_halaman_${idxs[i] + 1}`)))
       }
       results.value = res
       setProgress(100, 'Selesai!')
@@ -369,7 +381,7 @@ export function usePdfProcessor() {
         const cs       = bytes.length
         const saved    = originalSize - cs
         const savedPct = originalSize > 0 ? Math.max(0, Math.round(saved / originalSize * 100)) : 0
-        results.value  = [makeResult(bytes, 'compressed.pdf')]
+        results.value  = [makeResult(bytes, outputName(file, '.pdf'))]
         setProgress(100, 'Selesai!')
         return { originalSize, compressedSize: cs, saved: Math.max(0, saved), savedPct, bigger: cs >= originalSize }
       }
@@ -442,7 +454,7 @@ export function usePdfProcessor() {
         const cs       = bytes.length
         const saved    = originalSize - cs
         const savedPct = originalSize > 0 ? Math.max(0, Math.round(saved / originalSize * 100)) : 0
-        results.value  = [makeResult(bytes, 'compressed.pdf')]
+        results.value  = [makeResult(bytes, outputName(file, '.pdf'))]
         setProgress(100, 'Selesai!')
         return {
           originalSize, compressedSize: cs,
@@ -496,7 +508,7 @@ export function usePdfProcessor() {
       const cs       = out.length
       const saved    = originalSize - cs
       const savedPct = originalSize > 0 ? Math.max(0, Math.round(saved / originalSize * 100)) : 0
-      results.value  = [makeResult(out, 'compressed.pdf')]
+      results.value  = [makeResult(out, outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
       return { originalSize, compressedSize: cs, saved: Math.max(0, saved), savedPct, bigger: cs >= originalSize }
 
@@ -518,7 +530,7 @@ export function usePdfProcessor() {
         p.setRotation(degrees((p.getRotation().angle + deg) % 360))
       })
       setProgress(96, 'Menyimpan…')
-      results.value = [makeResult(await doc.save(), 'rotated.pdf')]
+      results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal memutar: ' + e.message }
     finally { processing.value = false }
@@ -535,7 +547,7 @@ export function usePdfProcessor() {
       const pages = await out.copyPages(src, order)
       pages.forEach(p => out.addPage(p))
       setProgress(88, 'Menyimpan…')
-      results.value = [makeResult(await out.save(), 'reordered.pdf')]
+      results.value = [makeResult(await out.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal mengatur ulang: ' + e.message }
     finally { processing.value = false }
@@ -563,7 +575,7 @@ export function usePdfProcessor() {
         })
       }
       setProgress(96, 'Menyimpan…')
-      results.value = [makeResult(await doc.save(), 'gambar_ke_pdf.pdf')]
+      results.value = [makeResult(await doc.save(), outputName(files[0], '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
     finally { processing.value = false }
@@ -586,7 +598,7 @@ export function usePdfProcessor() {
         const ctx = cv.getContext('2d')
         ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height)
         await pg.render({ canvasContext: ctx, viewport: vp }).promise
-        res.push(makeImgResult(cv.toDataURL('image/png'), `halaman_${i}.png`))
+        res.push(makeImgResult(cv.toDataURL('image/png'), outputName(file, '.png', `_halaman_${i}`)))
       }
       results.value = res
       setProgress(100, 'Selesai!')
@@ -614,7 +626,7 @@ export function usePdfProcessor() {
         pg.drawText(txt, { x, y, size: fs, font, color: rgb(0.45, 0.45, 0.45) })
       })
       setProgress(94, 'Menyimpan…')
-      results.value = [makeResult(await doc.save(), 'numbered.pdf')]
+      results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal: ' + e.message }
     finally { processing.value = false }
@@ -629,7 +641,7 @@ export function usePdfProcessor() {
       setProgress(60, 'Mengenkripsi…')
       doc.encrypt({ userPassword: password, ownerPassword: password + '_owner' })
       setProgress(88, 'Menyimpan…')
-      results.value = [makeResult(await doc.save(), 'protected.pdf')]
+      results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal enkripsi: ' + e.message }
     finally { processing.value = false }
@@ -643,7 +655,7 @@ export function usePdfProcessor() {
       setProgress(60, 'Membuka kunci…')
       const doc = await PDFDocument.load(ab, { password })
       setProgress(88, 'Menyimpan…')
-      results.value = [makeResult(await doc.save(), 'unlocked.pdf')]
+      results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal: Pastikan kata sandi benar.' }
     finally { processing.value = false }
@@ -688,7 +700,7 @@ ul,ol{margin:.3em 0;padding-left:1.4em}
 </html>`
 
       setProgress(100, 'Siap!')
-      return { html, name: file.name.replace(/\.docx?$/i, '') + '.pdf' }
+      return { html, name: outputName(file, '.pdf') }
     } catch (e) {
       errMsg.value = 'Gagal konversi: ' + e.message
       return null
@@ -782,7 +794,7 @@ tr:nth-child(even) td{background:#f8f8f8}
 </html>`
 
       setProgress(100, 'Siap!')
-      return { html, name: file.name.replace(/\.(xlsx?|csv|ods)$/i, '') + '.pdf' }
+      return { html, name: outputName(file, '.pdf') }
     } catch (e) {
       errMsg.value = 'Gagal konversi: ' + e.message
       return null
@@ -847,7 +859,7 @@ tr:nth-child(even) td{background:#f8f8f8}
 
       setProgress(95, 'Menyimpan...')
       const bytes = await zip.generateAsync({ type: 'uint8array' })
-      const outName = file.name.replace(/\.pdf$/i, '') + '.docx'
+      const outName = outputName(file, '.docx')
       const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
       results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(bytes.length) }]
       setProgress(100, 'Selesai!')
@@ -877,7 +889,7 @@ tr:nth-child(even) td{background:#f8f8f8}
         if (format === 'jpg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height) }
         ctx.drawImage(img, 0, 0)
         const dataUrl  = cv.toDataURL(mime, quality)
-        const outName  = files[i].name.replace(/\.[^.]+$/, '') + ext
+        const outName  = outputName(files[i], ext)
         res.push(makeImgResult(dataUrl, outName))
       }
       results.value = res
@@ -900,7 +912,7 @@ tr:nth-child(even) td{background:#f8f8f8}
         return wb.SheetNames.length > 1 ? `# Sheet: ${name}\n${csv}` : csv
       })
       const blob    = new Blob([parts.join('\n\n')], { type: 'text/csv;charset=utf-8;' })
-      const outName = file.name.replace(/\.(xlsx?|ods|csv)$/i, '.csv')
+      const outName = outputName(file, '.csv')
       results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(blob.size) }]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
@@ -917,7 +929,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       const r  = await window.mammoth.extractRawText({ arrayBuffer: ab })
       setProgress(90, 'Menyimpan…')
       const blob    = new Blob([r.value], { type: 'text/plain;charset=utf-8;' })
-      const outName = file.name.replace(/\.docx?$/i, '.txt')
+      const outName = outputName(file, '.txt')
       results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(blob.size) }]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal konversi: ' + e.message }
@@ -938,7 +950,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       const pages = await out.copyPages(src, keep)
       pages.forEach((p) => out.addPage(p))
       setProgress(88, 'Menyimpan…')
-      results.value = [makeResult(await out.save(), 'pages_removed.pdf')]
+      results.value = [makeResult(await out.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal: ' + e.message }
     finally { processing.value = false }
@@ -957,7 +969,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       const pages = await out.copyPages(src, idxs)
       pages.forEach((p) => out.addPage(p))
       setProgress(88, 'Menyimpan…')
-      results.value = [makeResult(await out.save(), 'extracted.pdf')]
+      results.value = [makeResult(await out.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal: ' + e.message }
     finally { processing.value = false }
@@ -989,7 +1001,7 @@ tr:nth-child(even) td{background:#f8f8f8}
         })
       })
       setProgress(90, 'Menyimpan…')
-      results.value = [makeResult(await doc.save(), 'watermarked.pdf')]
+      results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal: ' + e.message }
     finally { processing.value = false }
@@ -1108,8 +1120,7 @@ tr:nth-child(even) td{background:#f8f8f8}
 
       setProgress(93, 'Menyimpan...')
       const bytes = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true })
-      const baseName = file.name.replace(/\.pdf$/i, '').replace(/\.xlsx?$/i, '')
-      const outName = baseName + '.xlsx'
+      const outName = outputName(file, '.xlsx')
       const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       results.value = [{ url: URL.createObjectURL(blob), name: outName, sizeStr: fmtSize(blob.size) }]
       setProgress(100, 'Selesai!')
@@ -1135,7 +1146,7 @@ tr:nth-child(even) td{background:#f8f8f8}
         if (w > 0 && h > 0) page.setCropBox(x, y, w, h)
       })
       setProgress(90, 'Menyimpan…')
-      results.value = [makeResult(await doc.save(), 'cropped.pdf')]
+      results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal memotong: ' + e.message }
     finally { processing.value = false }
@@ -1149,7 +1160,7 @@ tr:nth-child(even) td{background:#f8f8f8}
       setProgress(60, 'Memulihkan struktur…')
       const doc = await PDFDocument.load(ab, { ignoreEncryption: true, updateMetadata: false })
       setProgress(85, 'Menyimpan…')
-      results.value = [makeResult(await doc.save({ useObjectStreams: true }), 'repaired.pdf')]
+      results.value = [makeResult(await doc.save({ useObjectStreams: true }), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal memulihkan: ' + e.message }
     finally { processing.value = false }
@@ -1184,7 +1195,7 @@ tr:nth-child(even) td{background:#f8f8f8}
         page.drawImage(sigImg, { x, y: pad, width: sigW, height: sigH })
       }
       setProgress(90, 'Menyimpan…')
-      results.value = [makeResult(await doc.save(), 'signed.pdf')]
+      results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal: ' + e.message }
     finally { processing.value = false }
@@ -1229,7 +1240,7 @@ tr:nth-child(even) td{background:#f8f8f8}
         }
       }
       setProgress(95, 'Menyimpan…')
-      results.value = [makeResult(await outDoc.save({ useObjectStreams: true }), 'redacted.pdf')]
+      results.value = [makeResult(await outDoc.save({ useObjectStreams: true }), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
     } catch (e) { errMsg.value = 'Gagal: ' + e.message }
     finally { processing.value = false }

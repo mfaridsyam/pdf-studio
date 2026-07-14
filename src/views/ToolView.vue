@@ -1552,7 +1552,7 @@ async function run() {
     const isFullDoc = /^\s*<!doctype|^\s*<html/i.test(trimmed)
     const html = isFullDoc ? trimmed
       : `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>HTML ke PDF</title><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#000;margin:0;padding:20mm}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:4px 8px}@media print{body{padding:15mm}}</style></head><body>${trimmed}</body></html>`
-    htmlPreview.value = { html, name: 'converted.pdf' }
+    htmlPreview.value = { html, name: 'html_pdfstudio.pdf' }
   }
 }
 
