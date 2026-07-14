@@ -1,5 +1,8 @@
 import { ref } from 'vue'
-import { PDFDocument, rgb, StandardFonts, degrees, PDFRawStream, PDFName } from 'pdf-lib'
+// @cantoo/pdf-lib, bukan pdf-lib. API-nya sama persis, bedanya fork ini punya
+// dukungan enkripsi: doc.encrypt() dan PDFDocument.load(bytes, { password }).
+// pdf-lib asli tidak punya keduanya, jadi Proteksi & Buka Kunci PDF mustahil.
+import { PDFDocument, rgb, StandardFonts, degrees, PDFRawStream, PDFName } from '@cantoo/pdf-lib'
 
 export async function loadPDFjs() {
   if (window._pdfjsReady) return
@@ -651,13 +654,41 @@ export function usePdfProcessor() {
     processing.value = true; errMsg.value = ''; results.value = []
     try {
       setProgress(30, 'Membaca PDF…')
-      const ab  = await readAB(file)
-      setProgress(60, 'Membuka kunci…')
-      const doc = await PDFDocument.load(ab, { password })
-      setProgress(88, 'Menyimpan…')
-      results.value = [makeResult(await doc.save(), outputName(file, '.pdf'))]
+      const ab = await readAB(file)
+
+      // Deteksi dulu apakah dokumennya memang terkunci. Tanpa ini, PDF biasa
+      // ikut diproses diam-diam dan user tidak tahu sandinya tak pernah dipakai.
+      let terkunci = true
+      try {
+        terkunci = (await PDFDocument.load(ab)).isEncrypted
+      } catch {
+        terkunci = true  // gagal dimuat tanpa sandi = memang terenkripsi
+      }
+      if (!terkunci) {
+        errMsg.value = 'PDF ini tidak terkunci — tidak perlu dibuka.'
+        return
+      }
+
+      setProgress(55, 'Membuka kunci…')
+      let src
+      try {
+        src = await PDFDocument.load(ab, { password })
+      } catch {
+        errMsg.value = 'Kata sandi salah. Periksa lagi lalu coba ulang.'
+        return
+      }
+
+      // Menyimpan ulang dokumen yang sama tetap meninggalkan rujukan /Encrypt
+      // di kamus xref, sehingga sebagian pembaca PDF masih menganggapnya
+      // terkunci. Menyalin halaman ke dokumen baru menghasilkan berkas bersih.
+      setProgress(80, 'Menyimpan…')
+      const out   = await PDFDocument.create()
+      const pages = await out.copyPages(src, src.getPageIndices())
+      pages.forEach((p) => out.addPage(p))
+
+      results.value = [makeResult(await out.save(), outputName(file, '.pdf'))]
       setProgress(100, 'Selesai!')
-    } catch (e) { errMsg.value = 'Gagal: Pastikan kata sandi benar.' }
+    } catch (e) { errMsg.value = 'Gagal membuka kunci: ' + e.message }
     finally { processing.value = false }
   }
 

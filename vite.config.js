@@ -7,13 +7,13 @@ export default defineConfig({
   // /tool/:id dibuka pertama kali — penemuan itu memicu "re-optimize + full
   // reload" yang tampak seperti halaman kosong sesaat di mode dev.
   optimizeDeps: {
-    include: ['pdf-lib', '@lucide/vue'],
+    include: ['@cantoo/pdf-lib', '@lucide/vue'],
   },
   build: {
     rollupOptions: {
       output: {
         manualChunks: {
-          'pdf-lib': ['pdf-lib'],
+          'pdf-lib': ['@cantoo/pdf-lib'],
         },
       },
     },
